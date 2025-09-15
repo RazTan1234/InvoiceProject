@@ -6,13 +6,38 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Calea către folderul principal al proiectului
 PROJECT_DIR = os.path.join(BASE_DIR, "..")  # urcă un nivel
-file_path = os.path.join(PROJECT_DIR, "data/input_samples/Facturi_Test.xlsx")
 
-def read_excel(file_path):
+# Fixed path construction - let the function take file_path as parameter
+def get_default_file_path():
+    """Returns the default Excel file path"""
+    return os.path.join(PROJECT_DIR, "data", "input_samples", "Facturi_Test.xlsx")
+
+def read_excel(file_path=None):
     """Citește fișierul Excel și validează coloanele necesare."""
+    if file_path is None:
+        file_path = get_default_file_path()
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        print(f"✗ Fișierul nu există: {file_path}")
+        print(f"✓ Directorul curent: {os.getcwd()}")
+        print(f"✓ BASE_DIR: {BASE_DIR}")
+        print(f"✓ PROJECT_DIR: {PROJECT_DIR}")
+        
+        # Try to find the file in current directory or subdirectories
+        current_dir = os.getcwd()
+        for root, dirs, files in os.walk(current_dir):
+            for file in files:
+                if file.endswith('.xlsx') and 'Facturi' in file:
+                    found_path = os.path.join(root, file)
+                    print(f"✓ Am găsit un fișier Excel similar: {found_path}")
+        
+        return None
+    
     try:
         df = pd.read_excel(file_path)
         print(f"✓ Fișierul Excel a fost citit cu succes: {len(df)} înregistrări")
+        print(f"✓ Calea fișierului: {os.path.abspath(file_path)}")
     except Exception as e:
         print(f"✗ Eroare la citirea fișierului: {e}")
         return None
@@ -104,7 +129,7 @@ def print_invoice_summary(df):
 
 if __name__ == "__main__":
     print("Citesc fișierul Excel...")
-    df = read_excel(file_path)
+    df = read_excel()
     
     if df is not None:
         # Afișează sumarul facturilor

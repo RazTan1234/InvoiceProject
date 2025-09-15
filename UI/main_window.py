@@ -1,10 +1,10 @@
 from PySide6.QtWidgets import (
     QMainWindow, QPushButton, QMessageBox, QVBoxLayout, QWidget, QLabel,
-    QStackedWidget, QToolBar, QLineEdit, QFormLayout
+    QStackedWidget, QToolBar, QLineEdit, QFormLayout, QFileDialog
 )
 from PySide6.QtGui import QAction
 from pathlib import Path
-import subprocess
+import os
 from core import excel_handler, pdf_generator
 
 
@@ -78,21 +78,19 @@ class MainWindow(QMainWindow):
         self.page_settings.setLayout(layout)
 
     def import_excel(self):
-        cmd = [
-            "powershell.exe",
-            "-Command",
-            "[System.Reflection.Assembly]::LoadWithPartialName('System.windows.forms') | Out-Null;"
-            "$f = New-Object System.Windows.Forms.OpenFileDialog;"
-            "$f.Filter = 'Excel Files (*.xlsx;*.xls)|*.xlsx;*.xls';"
-            "if ($f.ShowDialog() -eq 'OK') {Write-Output $f.FileName}"
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        path = result.stdout.strip()
-
-        if path:
-            self.excel_path = Path(path)
-            self.lbl_file.setText(f"Selected file: {path}")
-            QMessageBox.information(self, "Success", f"File selected:\n{path}")
+        """Simple file dialog that works on all platforms"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Excel File",
+            "",
+            "Excel Files (*.xlsx *.xls);;All Files (*)"
+        )
+        
+        if file_path:
+            self.excel_path = file_path  # Just save the path as string
+            filename = os.path.basename(file_path)
+            self.lbl_file.setText(f"Selected: {filename}")
+            QMessageBox.information(self, "Success", f"File imported: {filename}")
 
     def generate_pdfs(self):
         if not self.excel_path:
@@ -100,8 +98,23 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            invoices = excel_handler.read_excel(self.excel_path)
-            count = pdf_generator.generate_pdfs(invoices)
-            QMessageBox.information(self, "Success", f"Generated {count} PDF invoices.")
+            # Read Excel file
+            df = excel_handler.read_excel(self.excel_path)
+            
+            if df is None:
+                QMessageBox.critical(self, "Error", "Failed to read Excel file. Check the file format.")
+                return
+            
+            # Generate PDFs
+            generated_files = pdf_generator.generate_all_invoices(df)
+            count = len(generated_files)
+            
+            QMessageBox.information(
+                self, 
+                "Success", 
+                f"Generated {count} PDF invoices!\n\nSaved to: data/output_pdfs/"
+            )
+            
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            QMessageBox.critical(self, "Error", f"Failed to generate PDFs:\n{str(e)}")
+            print(f"Error details: {e}")  # For debugging
