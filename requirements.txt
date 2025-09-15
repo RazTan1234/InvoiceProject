@@ -1,0 +1,8 @@
+# UI - PySide6 pentru interfață grafică
+PySide6==6.*
+
+# Dacă vrei să testezi mock-urile din core (nu e obligatoriu)
+pandas
+openpyxl
+reportlab
+matplotlib
