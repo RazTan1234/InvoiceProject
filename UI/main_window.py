@@ -28,6 +28,7 @@ class MainWindow(QMainWindow):
 
         self.excel_data = None
         self.excel_file_path = None
+        self.current_settings = {}
 
     def _build_invoices_page(self):
         self.writeInvoicesButton = QPushButton("Write Invoices")
@@ -71,7 +72,7 @@ class MainWindow(QMainWindow):
 
         clicked = msg.clickedButton()
         if clicked == import_btn:
-            self.import_excel()   # 🔹 folosește funcția ta existentă
+            self.import_excel()
         elif clicked == open_btn:
             self.open_excel()
         else:
@@ -128,11 +129,9 @@ class MainWindow(QMainWindow):
         self.settingsPage.setLayout(layout)
         self.load_settings_from_file()
 
-
-
     def open_excel(self):
         file_path = excel_template.create_excel_template()
-        self._show_info(f"✅ Excel template creat și deschis:\n{file_path}")
+        self._show_info(f"Excel template creat și deschis:\n{file_path}")
         
     def import_excel(self):
         """Import Excel file using the correct function name"""
@@ -148,14 +147,14 @@ class MainWindow(QMainWindow):
                 if self.excel_data is not None:
                     self.excel_file_path = file_path
                     filename = os.path.basename(file_path)
-                    self.fileLabel.setText(f"✅ {filename}")
+                    self.fileLabel.setText(f"✓ {filename}")
                     self._show_info(f"Successfully imported {len(self.excel_data)} invoices from {filename}")
                 else:
-                    self.fileLabel.setText("❌ Failed to load file")
+                    self.fileLabel.setText("✗ Failed to load file")
                     self._show_error("Failed to read Excel file. Please check the file format and required columns.")
                     
             except Exception as e:
-                self.fileLabel.setText("❌ Error loading file")
+                self.fileLabel.setText("✗ Error loading file")
                 self._show_error(f"Error importing Excel file:\n{str(e)}")
                 print(f"Import error: {e}")  # Debug info
         else:
@@ -168,8 +167,16 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            # Use the correct function from pdf_generator
-            generated_files = pdf_generator.generate_all_invoices(self.excel_data)
+            # Load current settings to pass to PDF generator
+            seller_settings = None
+            if hasattr(self, 'current_settings') and self.current_settings:
+                seller_settings = self.current_settings.get('seller', {})
+                # Add company name to seller settings if available
+                if 'company' in self.current_settings:
+                    seller_settings['name'] = self.current_settings['company'].get('name', '')
+            
+            # Use the updated function from pdf_generator with seller settings
+            generated_files = pdf_generator.generate_all_invoices(self.excel_data, seller_settings)
             count = len(generated_files)
             
             if count > 0:
@@ -214,12 +221,11 @@ class MainWindow(QMainWindow):
         }
         try:
             settings_handler.save_settings(settings)
-            self._show_info("✅ Settings saved successfully!")
+            self._show_info("Settings saved successfully!")
             self.current_settings = settings
         except Exception as e:
             self._show_error(f"Could not save settings:\n{e}")
             print("Save settings error:", e)
-
 
     def load_settings_from_file(self):
         """Încarcă settings din JSON în self.current_settings și populează UI"""
@@ -235,7 +241,6 @@ class MainWindow(QMainWindow):
         # Populează câmpurile (setează doar ce nu e None; null din JSON devine None)
         self.populate_settings_form(self.current_settings)
 
-
     def populate_settings_form(self, settings: dict):
         """Setează text în QLineEdit-urile formului pentru setările curente."""
         def g(*keys):
@@ -250,7 +255,6 @@ class MainWindow(QMainWindow):
         self.companyName.setText(g("company", "name") or "")
         self.companyCUI.setText(g("company", "cui") or "")
 
-        # seller (doar câmpurile rămase)
         # seller
         self.sellerLegalId.setText(g("seller", "legal_id") or "")
         self.sellerVAT.setText(g("seller", "vat") or "")
@@ -259,24 +263,7 @@ class MainWindow(QMainWindow):
         self.sellerCounty.setText(g("seller", "county") or "")
         self.sellerCountry.setText(g("seller", "country") or "")
 
-
-
     def on_tab_changed(self, index: int):
         """Când tab-ul se schimbă, dacă e Settings reîncărcăm din fișier (în caz că s-a modificat extern)."""
         if index == self.tabs.indexOf(self.settingsPage):
             self.load_settings_from_file()
-
-    # ----- helpers UI -----
-    def _show_error(self, message):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Warning)
-        msg.setText(message)
-        msg.setWindowTitle("Error")
-        msg.exec()
-
-    def _show_info(self, message):
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Information)
-        msg.setText(message)
-        msg.setWindowTitle("Success")
-        msg.exec()

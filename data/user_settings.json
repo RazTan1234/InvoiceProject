@@ -1,0 +1,14 @@
+{
+    "company": {
+        "name": "RazvanSrl",
+        "cui": "wdws"
+    },
+    "seller": {
+        "legal_id": "sas",
+        "vat": "nustiu",
+        "street": "lainici",
+        "city": "bucuresti",
+        "county": "bucuresti",
+        "country": "romania"
+    }
+}

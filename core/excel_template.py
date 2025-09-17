@@ -1,12 +1,12 @@
 import os
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment,Protection
+from openpyxl.styles import Font, PatternFill, Alignment, Protection
 from openpyxl.utils import get_column_letter
 import platform
 import subprocess
-import time  # adaugÄƒ asta Ã®n importuri
+import time
 
-# --- funcÈ›ie helper pentru WSL ---
+# --- funcție helper pentru WSL ---
 def wsl_to_windows_path(path):
     if path.startswith("/mnt/"):
         drive_letter = path[5]  # litera discului
@@ -25,12 +25,12 @@ def create_excel_template(file_path=None):
         file_path = os.path.join(OUTPUT_DIR, file_name)
 
     columns = [
-        "NumÄƒr facturÄƒ", "Data emiterii", "Tip facturÄƒ", "MonedÄƒ",
-        "Nume cumpÄƒrÄƒtor", "ID legal cumpÄƒrÄƒtor", "ID TVA cumpÄƒrÄƒtor",
-        "StradÄƒ cumpÄƒrÄƒtor", "OraÈ™ cumpÄƒrÄƒtor", "JudeÈ› cumpÄƒrÄƒtor",
-        "Cod poÈ™tal cumpÄƒrÄƒtor", "ÈšarÄƒ cumpÄƒrÄƒtor",
-        "Termeni platÄƒ", "Linii facturÄƒ (produse)",
-        "Valoare totalÄƒ fÄƒrÄƒ TVA", "Total TVA", "Total platÄƒ"
+        "Număr factură", "Data emiterii", "Tip factură", "Monedă",
+        "Nume cumpărător", "ID legal cumpărător", "ID TVA cumpărător",
+        "Stradă cumpărător", "Oraș cumpărător", "Județ cumpărător",
+        "Cod poștal cumpărător", "Țară cumpărător",
+        "Termeni plată", "Linii factură (produse)",
+        "Valoare totală fără TVA", "Total TVA", "Total plată"
     ]
 
     wb = Workbook()
@@ -46,13 +46,11 @@ def create_excel_template(file_path=None):
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = header_alignment
-        cell.protection = Protection(locked=True)  # âœ… corect
+        cell.protection = Protection(locked=True)
 
     for row in ws.iter_rows(min_row=2, max_row=100, max_col=len(columns)):
         for cell in row:
             cell.protection = Protection(locked=False)
-
-
 
     for i, col_name in enumerate(columns, 1):
         ws.column_dimensions[get_column_letter(i)].width = max(len(col_name) + 2, 15)
@@ -61,9 +59,9 @@ def create_excel_template(file_path=None):
     ws.protection.password = "invoice"
 
     wb.save(file_path)
-    print(f"âœ… Excel template creat: {file_path}")
+    print(f"✓ Excel template creat: {file_path}")
 
-    # Deschide fiÈ™ierul automat
+    # Deschide fișierul automat
     system_platform = platform.system()
     try:
         if system_platform == "Windows":
@@ -73,7 +71,6 @@ def create_excel_template(file_path=None):
         else:  # Linux
             subprocess.call(['cmd.exe', '/c', 'start', '', wsl_to_windows_path(file_path)])
     except Exception as e:
-        print(f"âš ï¸ Nu s-a putut deschide Excel-ul automat: {e}")
+        print(f"⚠️ Nu s-a putut deschide Excel-ul automat: {e}")
         
-
     return file_path

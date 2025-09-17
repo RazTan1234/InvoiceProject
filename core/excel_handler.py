@@ -42,14 +42,15 @@ def read_excel(file_path=None):
         print(f"✗ Eroare la citirea fișierului: {e}")
         return None
     
-    # Coloanele necesare pentru generarea facturilor
+    # Coloanele necesare pentru generarea facturilor (doar cele introduse de user)
     required_columns = [
-    "Număr factură", "Data emiterii", "Tip factură", "Monedă",
-    "Nume cumpărător", "ID legal cumpărător", "ID TVA cumpărător",
-    "Stradă cumpărător", "Oraș cumpărător", "Județ cumpărător", "Cod poștal cumpărător", "Țară cumpărător",
-    "Termeni plată", "Linii factură (produse)",
-    "Valoare totală fără TVA", "Total TVA", "Total plată"
-]
+        "Număr factură", "Data emiterii", "Tip factură", "Monedă",
+        "Nume cumpărător", "ID legal cumpărător", "ID TVA cumpărător",
+        "Stradă cumpărător", "Oraș cumpărător", "Județ cumpărător", 
+        "Cod poștal cumpărător", "Țară cumpărător",
+        "Termeni plată", "Linii factură (produse)",
+        "Valoare totală fără TVA", "Total TVA", "Total plată"
+    ]
     
     # Verifică dacă toate coloanele necesare există
     missing = [col for col in required_columns if col not in df.columns]
@@ -67,7 +68,7 @@ def count_products(lines_str):
     """Numără produsele din coloana 'Linii factură (produse)'."""
     if pd.isna(lines_str) or not lines_str:
         return 0
-    # Produsele sunt separate prin „;"
+    # Produsele sunt separate prin ";"
     products = lines_str.split(";")
     return len([p for p in products if p.strip()])  # Numără doar liniile non-goale
 
@@ -94,8 +95,8 @@ def validate_invoice_data(df):
         except (ValueError, TypeError):
             issues.append(f"Factura {invoice_num}: Valori totale invalide")
         
-        # Verifică datele obligatorii
-        required_fields = ["Nume vânzător", "Nume cumpărător", "Data emiterii"]
+        # Verifică datele obligatorii (removed seller fields since they come from settings)
+        required_fields = ["Nume cumpărător", "Data emiterii"]
         for field in required_fields:
             if pd.isna(row[field]) or str(row[field]).strip() == "":
                 issues.append(f"Factura {invoice_num}: Câmpul '{field}' este gol")
@@ -111,7 +112,6 @@ def print_invoice_summary(df):
     for index, row in df.iterrows():
         inv_num = row["Număr factură"]
         date = row["Data emiterii"]
-        seller = row["Nume vânzător"]
         buyer = row["Nume cumpărător"]
         total = row["Total plată"]
         currency = row["Monedă"]
@@ -119,7 +119,6 @@ def print_invoice_summary(df):
         
         print(f"Factura: {inv_num}")
         print(f"  Data: {date}")
-        print(f"  Vânzător: {seller}")
         print(f"  Cumpărător: {buyer}")
         print(f"  Produse: {num_products}")
         print(f"  Total: {total} {currency}")
@@ -140,7 +139,7 @@ if __name__ == "__main__":
         
         issues = validate_invoice_data(df)
         if issues:
-            print("⚠️  Probleme găsite:")
+            print("⚠️ Probleme găsite:")
             for issue in issues:
                 print(f"  - {issue}")
         else:
