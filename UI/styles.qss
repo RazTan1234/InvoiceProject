@@ -1,51 +1,97 @@
-QMainWindow {
-    background-color: #222;
-    color: white;
+QWidget {
+    background-color: #1e1e2f;
+    color: #e0e0e0;
     font-family: "Segoe UI", sans-serif;
-}
-
-QToolBar {
-    background: #333;
-    padding: 5px;
-}
-
-QToolBar QToolButton {
-    color: white;
-    padding: 6px 14px;
-    border-radius: 6px;
-}
-
-QToolBar QToolButton:hover {
-    background: #444;
-}
-
-QPushButton {
-    background: qlineargradient(
-        x1:0, y1:0, x2:0, y2:1,
-        stop:0 #7f5af0, stop:1 #6246ea
-    );
-    color: white;
-    border-radius: 8px;
-    padding: 10px;
-    font-weight: bold;
-}
-
-QPushButton:hover {
-    background: qlineargradient(
-        x1:0, y1:0, x2:0, y2:1,
-        stop:0 #9a73f9, stop:1 #7f5af0
-    );
-}
-
-QLabel {
-    color: white;
     font-size: 14px;
 }
 
-QLineEdit {
-    background: #111;
-    border: 1px solid #555;
-    border-radius: 6px;
-    padding: 6px;
+QTabWidget::pane {
+    border: none;
+    background: transparent;
+}
+
+QTabBar::tab {
+    background: transparent;
+    color: #aaa;
+    padding: 8px 20px;
+    font-weight: bold;
+}
+
+QTabBar::tab:selected {
+    color: #fff;
+    border-bottom: 2px solid #a970ff;
+}
+
+QPushButton {
+    border: none;
+    border-radius: 20px;
+    padding: 8px 24px;
+    font-weight: bold;
+    min-width: 160px;
+}
+
+QPushButton#importButton {
+    background-color: #a970ff;
     color: white;
+}
+QPushButton#importButton:hover {
+    background-color: #9256e6;
+}
+
+QPushButton#generateButton {
+    background-color: #007bff;
+    color: white;
+}
+QPushButton#generateButton:hover {
+    background-color: #0063cc;
+}
+
+QLabel#fileLabel {
+    color: #aaa;
+    font-style: italic;
+    margin-top: 10px;
+}
+
+QLineEdit {
+    background: #2a2a3d;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #eee;
+}
+QLineEdit:focus {
+    border: 1px solid #a970ff;
+    outline: none;
+}
+
+QMessageBox {
+    background-color: #2a2a3d;
+    color: #eee;
+}
+
+QMessageBox QPushButton {
+    border-radius: 12px;
+    padding: 6px 16px;
+    background-color: #a970ff;
+    color: white;
+    font-weight: bold;
+}
+QMessageBox QPushButton:hover {
+    background-color: #9256e6;
+}
+
+QPushButton#saveSettingsButton {
+    background-color: #a970ff;
+    color: white;
+}
+QPushButton#saveSettingsButton:hover {
+    background-color: #9256e6;
+}
+
+QPushButton#writeInvoicesButton {
+    background-color: #a970ff;
+    color: white;
+}
+QPushButton#writeInvoicesButton:hover {
+    background-color: #9256e6;
 }

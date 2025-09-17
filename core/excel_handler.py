@@ -44,14 +44,12 @@ def read_excel(file_path=None):
     
     # Coloanele necesare pentru generarea facturilor
     required_columns = [
-        "Număr factură", "Data emiterii", "Tip factură", "Monedă",
-        "Nume vânzător", "ID legal vânzător", "ID TVA vânzător",
-        "Stradă vânzător", "Oraș vânzător", "Județ vânzător", "Cod poștal vânzător", "Țară vânzător",
-        "Nume cumpărător", "ID legal cumpărător", "ID TVA cumpărător",
-        "Stradă cumpărător", "Oraș cumpărător", "Județ cumpărător", "Cod poștal cumpărător", "Țară cumpărător",
-        "Termeni plată", "Linii factură (produse)",
-        "Valoare totală fără TVA", "Total TVA", "Total plată"
-    ]
+    "Număr factură", "Data emiterii", "Tip factură", "Monedă",
+    "Nume cumpărător", "ID legal cumpărător", "ID TVA cumpărător",
+    "Stradă cumpărător", "Oraș cumpărător", "Județ cumpărător", "Cod poștal cumpărător", "Țară cumpărător",
+    "Termeni plată", "Linii factură (produse)",
+    "Valoare totală fără TVA", "Total TVA", "Total plată"
+]
     
     # Verifică dacă toate coloanele necesare există
     missing = [col for col in required_columns if col not in df.columns]

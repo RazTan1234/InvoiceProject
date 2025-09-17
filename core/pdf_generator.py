@@ -128,76 +128,87 @@ def create_info_card(pdf, x, y, width, height, title, content, color):
         pdf.ln(line_height)
         pdf.set_x(x + 5)
 
-def generate_invoice_pdf(row):
+def safe_get(row, column_name, default="N/A"):
+    """Safely get a value from DataFrame row, return default if not exists or empty."""
+    try:
+        value = row.get(column_name, default)
+        if pd.isna(value) or str(value).strip() == "":
+            return default
+        return str(value)
+    except:
+        return default
+
+def generate_invoice_pdf(row, seller_settings=None):
     """Generează PDF modern pentru o factură."""
     
     pdf = ModernPDFInvoice()
     pdf.add_page()
-    
+
     # Reset la poziția după header
     pdf.set_xy(15, 40)
-    
+
     # === SECȚIUNEA INVOICE INFO ===
-    # Informații factură în stil modern card-based
     pdf.set_fill_color(*pdf.LIGHT_GRAY)
     pdf.rect(15, 40, 180, 25, 'F')
-    
-    # Invoice number (prominent)
+
     pdf.set_xy(20, 45)
     pdf.set_text_color(*pdf.DARK_GRAY)
     pdf.set_font("DejaVu", "B", 14)
-    pdf.cell(0, 8, f"FACTURĂ #{row['Număr factură']}")
-    
-    # Info în coloane
+    pdf.cell(0, 8, f"FACTURĂ #{safe_get(row, 'Număr factură')}")
+
     pdf.set_font("DejaVu", "", 9)
     pdf.set_xy(20, 55)
-    pdf.cell(40, 5, f"Data: {row['Data emiterii']}")
+    pdf.cell(40, 5, f"Data: {safe_get(row, 'Data emiterii')}")
     pdf.set_xy(80, 55)
-    pdf.cell(40, 5, f"Tip: {row['Tip factură']}")
+    pdf.cell(40, 5, f"Tip: {safe_get(row, 'Tip factură')}")
     pdf.set_xy(140, 55)
-    pdf.cell(40, 5, f"Moneda: {row['Monedă']}")
-    
+    pdf.cell(40, 5, f"Moneda: {safe_get(row, 'Monedă')}")
+
     pdf.ln(25)
-    
+
     # === CARDS VÂNZĂTOR ȘI CUMPĂRĂTOR ===
-    # Vânzător card
-    seller_content = [
-        f"{row['Nume vânzător']}",
-        f"ID Legal: {row['ID legal vânzător']}",
-        f"ID TVA: {row['ID TVA vânzător']}",
-        f"{row['Stradă vânzător']}",
-        f"{row['Oraș vânzător']}, {row['Județ vânzător']}",
-        f"{row['Cod poștal vânzător']}, {row['Țară vânzător']}"
-    ]
-    create_info_card(pdf, 15, 75, 85, 50, "VÂNZĂTOR", seller_content, pdf.WHITE)
+    # Vânzător card - use settings if available, otherwise show placeholder
+    if seller_settings:
+        seller_content = [
+            f"Nume: {seller_settings.get('name', 'Nu este setat')}",
+            f"ID Legal: {seller_settings.get('legal_id', 'Nu este setat')}",
+            f"ID TVA: {seller_settings.get('vat', 'Nu este setat')}",
+        ]
+    else:
+        seller_content = [
+            "Nume: Nu este configurat",
+            "ID Legal: Nu este configurat", 
+            "ID TVA: Nu este configurat",
+            "(Configurați în Settings)"
+        ]
     
-    # Cumpărător card
+    create_info_card(pdf, 15, 75, 85, 40, "VÂNZĂTOR", seller_content, pdf.WHITE)
+
+    # Cumpărător card (date din Excel)
     buyer_content = [
-        f"{row['Nume cumpărător']}",
-        f"ID Legal: {row['ID legal cumpărător']}",
-        f"ID TVA: {row['ID TVA cumpărător']}",
-        f"{row['Stradă cumpărător']}",
-        f"{row['Oraș cumpărător']}, {row['Județ cumpărător']}",
-        f"{row['Cod poștal cumpărător']}, {row['Țară cumpărător']}"
+        f"{safe_get(row, 'Nume cumpărător')}",
+        f"ID Legal: {safe_get(row, 'ID legal cumpărător')}",
+        f"ID TVA: {safe_get(row, 'ID TVA cumpărător')}",
+        f"{safe_get(row, 'Stradă cumpărător')}",
+        f"{safe_get(row, 'Oraș cumpărător')}, {safe_get(row, 'Județ cumpărător')}",
+        f"{safe_get(row, 'Cod poștal cumpărător')}, {safe_get(row, 'Țară cumpărător')}"
     ]
     create_info_card(pdf, 110, 75, 85, 50, "CUMPĂRĂTOR", buyer_content, pdf.WHITE)
-    
-    # Termeni de plată
-    pdf.set_xy(15, 135)
+
+    # Adjust position after seller card height change
+    pdf.set_xy(15, 145)
     pdf.set_fill_color(*pdf.BRAND_BLUE)
     pdf.set_text_color(*pdf.WHITE)
     pdf.set_font("DejaVu", "B", 9)
-    pdf.cell(180, 8, f"   Termeni de plată: {row['Termeni plată']}", 'F')
-    
+    pdf.cell(180, 8, f"   Termeni de plată: {safe_get(row, 'Termeni plată')}", 'F')
+
     pdf.ln(15)
-    
-    # === TABEL PRODUSE MODERN ===
-    # Header tabel cu gradient effect
+
+    # === TABEL PRODUSE ===
     pdf.set_fill_color(*pdf.DARK_GRAY)
     pdf.set_text_color(*pdf.WHITE)
     pdf.set_font("DejaVu", "B", 9)
-    
-    # Header row
+
     pdf.set_x(15)
     pdf.cell(65, 10, "Produs", 1, align="C", fill=True)
     pdf.cell(18, 10, "Cant.", 1, align="C", fill=True)
@@ -207,84 +218,97 @@ def generate_invoice_pdf(row):
     pdf.cell(20, 10, "TVA", 1, align="C", fill=True)
     pdf.cell(25, 10, "Total", 1, align="C", fill=True)
     pdf.ln()
-    
-    # Parsare și afișare produse cu alternating colors
-    products = parse_product_lines(row['Linii factură (produse)'])
+
+    products = parse_product_lines(safe_get(row, 'Linii factură (produse)', ""))
     pdf.set_text_color(*pdf.DARK_GRAY)
     pdf.set_font("DejaVu", "", 8)
-    
-    for i, product in enumerate(products):
-        # Alternating row colors
-        if i % 2 == 0:
-            pdf.set_fill_color(248, 249, 250)  # Very light gray
-        else:
-            pdf.set_fill_color(*pdf.WHITE)
-        
-        product_name = product["name"][:28] + "..." if len(product["name"]) > 28 else product["name"]
-        
+
+    # If no products, show a placeholder row
+    if not products:
+        pdf.set_fill_color(248, 249, 250)
         pdf.set_x(15)
-        pdf.cell(65, 8, product_name, 1, fill=True)
-        pdf.cell(18, 8, f'{product["quantity"]:.0f}', 1, align="R", fill=True)
-        pdf.cell(25, 8, f'{product["unit_price"]:.2f}', 1, align="R", fill=True)
-        pdf.cell(22, 8, f'{product["subtotal"]:.2f}', 1, align="R", fill=True)
-        pdf.cell(15, 8, f'{product["vat_rate"]:.0f}%', 1, align="C", fill=True)
-        pdf.cell(20, 8, f'{product["vat_amount"]:.2f}', 1, align="R", fill=True)
-        pdf.cell(25, 8, f'{product["total"]:.2f}', 1, align="R", fill=True)
+        pdf.cell(190, 8, "Nu sunt produse definite", 1, align="C", fill=True)
         pdf.ln()
-    
+    else:
+        for i, product in enumerate(products):
+            if i % 2 == 0:
+                pdf.set_fill_color(248, 249, 250)
+            else:
+                pdf.set_fill_color(*pdf.WHITE)
+
+            product_name = product["name"][:28] + "..." if len(product["name"]) > 28 else product["name"]
+
+            pdf.set_x(15)
+            pdf.cell(65, 8, product_name, 1, fill=True)
+            pdf.cell(18, 8, f'{product["quantity"]:.0f}', 1, align="R", fill=True)
+            pdf.cell(25, 8, f'{product["unit_price"]:.2f}', 1, align="R", fill=True)
+            pdf.cell(22, 8, f'{product["subtotal"]:.2f}', 1, align="R", fill=True)
+            pdf.cell(15, 8, f'{product["vat_rate"]:.0f}%', 1, align="C", fill=True)
+            pdf.cell(20, 8, f'{product["vat_amount"]:.2f}', 1, align="R", fill=True)
+            pdf.cell(25, 8, f'{product["total"]:.2f}', 1, align="R", fill=True)
+            pdf.ln()
+
     pdf.ln(8)
-    
-    # === TOTALURI FINALE CU DESIGN MODERN ===
-    # Background pentru totaluri
+
+    # === TOTALURI ===
     pdf.set_fill_color(*pdf.LIGHT_GRAY)
     pdf.rect(120, pdf.get_y(), 75, 35, 'F')
-    
-    # Totaluri cu stil
+
     totals_y = pdf.get_y() + 5
-    
     pdf.set_xy(125, totals_y)
     pdf.set_text_color(*pdf.DARK_GRAY)
     pdf.set_font("DejaVu", "", 10)
-    pdf.cell(65, 7, f"Subtotal: {row['Valoare totală fără TVA']:.2f} {row['Monedă']}", align="R")
     
+    # Safely get numeric values
+    try:
+        subtotal = float(safe_get(row, 'Valoare totală fără TVA', '0'))
+        vat_total = float(safe_get(row, 'Total TVA', '0'))
+        total_payment = float(safe_get(row, 'Total plată', '0'))
+        currency = safe_get(row, 'Monedă', 'RON')
+    except (ValueError, TypeError):
+        subtotal = vat_total = total_payment = 0.0
+        currency = 'RON'
+    
+    pdf.cell(65, 7, f"Subtotal: {subtotal:.2f} {currency}", align="R")
+
     pdf.set_xy(125, totals_y + 8)
-    pdf.cell(65, 7, f"TVA: {row['Total TVA']:.2f} {row['Monedă']}", align="R")
-    
-    # Linie separator
-    pdf.set_draw_color(*pdf.DARK_GRAY)
+    pdf.cell(65, 7, f"TVA: {vat_total:.2f} {currency}", align="R")
+
     pdf.line(125, totals_y + 17, 190, totals_y + 17)
-    
-    # Total final cu background colorat
+
     pdf.set_xy(120, totals_y + 20)
     pdf.set_fill_color(*pdf.SUCCESS_GREEN)
     pdf.set_text_color(*pdf.WHITE)
     pdf.set_font("DejaVu", "B", 12)
-    pdf.cell(75, 10, f"TOTAL: {row['Total plată']:.2f} {row['Monedă']}", 1, align="C", fill=True)
-    
-    # === FOOTER MESSAGE ===
+    pdf.cell(75, 10, f"TOTAL: {total_payment:.2f} {currency}", 1, align="C", fill=True)
+
+    # Footer
     pdf.set_xy(15, pdf.get_y() + 25)
     pdf.set_text_color(*pdf.TEXT_GRAY)
     pdf.set_font("DejaVu", "I", 9)
     pdf.cell(0, 5, "Vă mulțumim pentru colaborare și vă așteptăm din nou!", align="C")
-    
+
     # Salvare PDF
-    safe_filename = str(row['Număr factură']).replace("/", "_").replace("\\", "_")
+    safe_filename = str(safe_get(row, 'Număr factură', 'UNKNOWN')).replace("/", "_").replace("\\", "_")
     file_path = os.path.join(OUTPUT_DIR, f"Modern_Invoice_{safe_filename}.pdf")
     pdf.output(file_path)
-    
+
     return file_path
 
-def generate_all_invoices(df):
+
+def generate_all_invoices(df, seller_settings=None):
     """Generează PDF-uri pentru toate facturile din DataFrame."""
     generated_files = []
     
     for index, row in df.iterrows():
         try:
-            file_path = generate_invoice_pdf(row)
+            file_path = generate_invoice_pdf(row, seller_settings)
             generated_files.append(file_path)
-            print(f"✓ Factura {row['Număr factură']} generată: {file_path}")
+            print(f"✓ Factura {safe_get(row, 'Număr factură')} generată: {file_path}")
         except Exception as e:
-            print(f"✗ Eroare la generarea facturii {row['Număr factură']}: {e}")
+            print(f"✗ Eroare la generarea facturii {safe_get(row, 'Număr factură')}: {e}")
+            import traceback
+            traceback.print_exc()  # This will help debug the issue
     
     return generated_files
 
