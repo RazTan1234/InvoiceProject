@@ -1,9 +1,12 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QTabWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFileDialog, QMessageBox, QLineEdit, QFormLayout
+    QPushButton, QLabel, QFileDialog, QMessageBox, QLineEdit, QFormLayout, QListWidget
 )
 from PySide6.QtCore import Qt
 import os
+import subprocess
+import sys
+
 from core import excel_handler, pdf_generator, settings_handler, excel_template
 
 
@@ -16,21 +19,25 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
-        self.invoicesPage = QWidget()
+        self.mainPage = QWidget()
+        self.invoicesListPage = QWidget()
         self.settingsPage = QWidget()
 
-        self.tabs.addTab(self.invoicesPage, "Invoices")
+        self.tabs.addTab(self.mainPage, "Main")
+        self.tabs.addTab(self.invoicesListPage, "Invoices")
         self.tabs.addTab(self.settingsPage, "Settings")
 
-        self._build_invoices_page()
+        self._build_main_page()
+        self._build_invoices_list_page()
         self._build_settings_page()
+
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
         self.excel_data = None
         self.excel_file_path = None
         self.current_settings = {}
 
-    def _build_invoices_page(self):
+    def _build_main_page(self):
         self.writeInvoicesButton = QPushButton("Write Invoices")
         self.writeInvoicesButton.setObjectName("writeInvoicesButton")
 
@@ -55,33 +62,46 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.fileLabel, alignment=Qt.AlignCenter)
         layout.addStretch()
 
-        self.invoicesPage.setLayout(layout)
+        self.mainPage.setLayout(layout)
         self.generateButton.clicked.connect(self.generate_pdfs)
-    
-    def show_write_invoices_popup(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Write Invoices")
-        msg.setText("Choose an option:")
-        msg.setIcon(QMessageBox.Question)
 
-        import_btn = msg.addButton("Import Excel", QMessageBox.AcceptRole)
-        open_btn = msg.addButton("New Excel", QMessageBox.ActionRole)
-        cancel_btn = msg.addButton("Cancel", QMessageBox.RejectRole)
+    def _build_invoices_list_page(self):
+        layout = QVBoxLayout()
+        self.pdfList = QListWidget()
+        layout.addWidget(self.pdfList)
+        self.invoicesListPage.setLayout(layout)
 
-        msg.exec()
+        self.load_pdfs()
+        self.pdfList.itemDoubleClicked.connect(self.open_pdf)
 
-        clicked = msg.clickedButton()
-        if clicked == import_btn:
-            self.import_excel()
-        elif clicked == open_btn:
-            self.open_excel()
-        else:
-            pass  # Cancel
+    def load_pdfs(self):
+        self.pdfList.clear()
+        folder = "data/output_pdfs"
+        if os.path.exists(folder):
+            for file in os.listdir(folder):
+                if file.lower().endswith(".pdf"):
+                    self.pdfList.addItem(file)
+
+    def open_pdf(self, item):
+        filepath = os.path.abspath(os.path.join("data/output_pdfs", item.text()))
+        if sys.platform.startswith("linux"):
+            if "microsoft" in os.uname().release.lower():
+                if filepath.startswith("/mnt/"):
+                    drive = filepath[5]
+                    win_path = drive.upper() + ":" + filepath[6:]
+                    win_path = win_path.replace("/", "\\")
+                else:
+                    win_path = filepath.replace("/", "\\")
+                subprocess.Popen(["cmd.exe", "/c", "start", "", win_path])
+            else:
+                subprocess.Popen(["xdg-open", filepath])
+        elif sys.platform == "win32":
+            os.startfile(filepath)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", filepath])
 
     def _build_settings_page(self):
         layout = QFormLayout()
-
-        # Company
         self.companyName = QLineEdit()
         self.companyName.setPlaceholderText("Company name")
         self.companyCUI = QLineEdit()
@@ -89,7 +109,6 @@ class MainWindow(QMainWindow):
         layout.addRow("Company:", self.companyName)
         layout.addRow("CUI:", self.companyCUI)
 
-        # Seller fields
         self.sellerLegalId = QLineEdit()
         self.sellerLegalId.setPlaceholderText("ID legal vânzător")
         self.sellerVAT = QLineEdit()
@@ -110,7 +129,6 @@ class MainWindow(QMainWindow):
         layout.addRow("Județ vânzător:", self.sellerCounty)
         layout.addRow("Țară vânzător:", self.sellerCountry)
 
-        # Save button
         self.saveSettingsButton = QPushButton("Save Settings")
         self.saveSettingsButton.setObjectName("saveSettingsButton")
         self.saveSettingsButton.setMinimumWidth(160)
@@ -124,26 +142,38 @@ class MainWindow(QMainWindow):
         btn_container.setLayout(btn_layout)
         layout.addRow(btn_container)
 
-        # Connect save button
         self.saveSettingsButton.clicked.connect(self.save_settings)
         self.settingsPage.setLayout(layout)
         self.load_settings_from_file()
 
+    def show_write_invoices_popup(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Write Invoices")
+        msg.setText("Choose an option:")
+        msg.setIcon(QMessageBox.Question)
+
+        import_btn = msg.addButton("Import Excel", QMessageBox.AcceptRole)
+        open_btn = msg.addButton("New Excel", QMessageBox.ActionRole)
+        cancel_btn = msg.addButton("Cancel", QMessageBox.RejectRole)
+
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked == import_btn:
+            self.import_excel()
+        elif clicked == open_btn:
+            self.open_excel()
+
     def open_excel(self):
         file_path = excel_template.create_excel_template()
         self._show_info(f"Excel template creat și deschis:\n{file_path}")
-        
+
     def import_excel(self):
-        """Import Excel file using the correct function name"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Select Excel File", "", "Excel Files (*.xlsx *.xls)"
         )
-        
         if file_path:
             try:
-                # Use the correct function name: read_excel (not load_excel)
                 self.excel_data = excel_handler.read_excel(file_path)
-                
                 if self.excel_data is not None:
                     self.excel_file_path = file_path
                     filename = os.path.basename(file_path)
@@ -152,44 +182,32 @@ class MainWindow(QMainWindow):
                 else:
                     self.fileLabel.setText("✗ Failed to load file")
                     self._show_error("Failed to read Excel file. Please check the file format and required columns.")
-                    
             except Exception as e:
                 self.fileLabel.setText("✗ Error loading file")
                 self._show_error(f"Error importing Excel file:\n{str(e)}")
-                print(f"Import error: {e}")  # Debug info
-        else:
-            self.fileLabel.setText("No file selected")
 
     def generate_pdfs(self):
-        """Generate PDFs from the imported Excel data"""
         if self.excel_data is None or self.excel_data.empty:
             self._show_error("Please import an Excel file first!")
             return
-
         try:
-            # Load current settings to pass to PDF generator
             seller_settings = None
             if hasattr(self, 'current_settings') and self.current_settings:
                 seller_settings = self.current_settings.get('seller', {})
-                # Add company name to seller settings if available
                 if 'company' in self.current_settings:
                     seller_settings['name'] = self.current_settings['company'].get('name', '')
-            
-            # Use the updated function from pdf_generator with seller settings
+
             generated_files = pdf_generator.generate_all_invoices(self.excel_data, seller_settings)
-            count = len(generated_files)
-            
-            if count > 0:
-                self._show_info(f"Successfully generated {count} PDF invoices!\n\nFiles saved to: data/output_pdfs/")
+            if len(generated_files) > 0:
+                self._show_info(f"Successfully generated {len(generated_files)} PDF invoices!\n\nFiles saved to: data/output_pdfs/")
+                self.load_pdfs()
+                self.tabs.setCurrentWidget(self.invoicesListPage)
             else:
                 self._show_error("No PDF files were generated. Please check your Excel data.")
-                
         except Exception as e:
             self._show_error(f"Error generating PDFs:\n{str(e)}")
-            print(f"PDF generation error: {e}")  # Debug info
 
     def _show_error(self, message):
-        """Show error message dialog"""
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Warning)
         msg.setText(message)
@@ -197,13 +215,12 @@ class MainWindow(QMainWindow):
         msg.exec()
 
     def _show_info(self, message):
-        """Show info message dialog"""
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Information)
         msg.setText(message)
         msg.setWindowTitle("Success")
         msg.exec()
-    
+
     def save_settings(self):
         settings = {
             "company": {
@@ -225,10 +242,8 @@ class MainWindow(QMainWindow):
             self.current_settings = settings
         except Exception as e:
             self._show_error(f"Could not save settings:\n{e}")
-            print("Save settings error:", e)
 
     def load_settings_from_file(self):
-        """Încarcă settings din JSON în self.current_settings și populează UI"""
         try:
             loaded = settings_handler.load_settings()
             if not isinstance(loaded, dict):
@@ -237,12 +252,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print("Error loading settings:", e)
             self.current_settings = {}
-
-        # Populează câmpurile (setează doar ce nu e None; null din JSON devine None)
         self.populate_settings_form(self.current_settings)
 
     def populate_settings_form(self, settings: dict):
-        """Setează text în QLineEdit-urile formului pentru setările curente."""
         def g(*keys):
             d = settings
             for k in keys:
@@ -250,12 +262,8 @@ class MainWindow(QMainWindow):
                     return None
                 d = d.get(k)
             return d
-
-        # company
         self.companyName.setText(g("company", "name") or "")
         self.companyCUI.setText(g("company", "cui") or "")
-
-        # seller
         self.sellerLegalId.setText(g("seller", "legal_id") or "")
         self.sellerVAT.setText(g("seller", "vat") or "")
         self.sellerStreet.setText(g("seller", "street") or "")
@@ -264,6 +272,7 @@ class MainWindow(QMainWindow):
         self.sellerCountry.setText(g("seller", "country") or "")
 
     def on_tab_changed(self, index: int):
-        """Când tab-ul se schimbă, dacă e Settings reîncărcăm din fișier (în caz că s-a modificat extern)."""
         if index == self.tabs.indexOf(self.settingsPage):
             self.load_settings_from_file()
+        elif index == self.tabs.indexOf(self.invoicesListPage):
+            self.load_pdfs()
