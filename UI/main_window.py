@@ -1,11 +1,14 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QTabWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFileDialog, QMessageBox, QLineEdit, QFormLayout
+    QPushButton, QLabel, QFileDialog, QMessageBox, QLineEdit, QFormLayout, QListWidget, QTextEdit
 )
 from PySide6.QtCore import Qt
 import os
+import subprocess
+import sys
 from core import excel_handler, pdf_generator, settings_handler, excel_template
-
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -15,22 +18,74 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
-
-        self.invoicesPage = QWidget()
+        
+        self.mainPage = QWidget()
+        self.invoicesListPage = QWidget()
         self.settingsPage = QWidget()
 
-        self.tabs.addTab(self.invoicesPage, "Invoices")
+        self.aboutPage = QWidget()  # New About page
+
+        self.chartsPage = QWidget()  # new Charts page
+
+        self.tabs.addTab(self.mainPage, "Main")
+        self.tabs.addTab(self.aboutPage, "About")
+        self.tabs.addTab(self.invoicesListPage, "Invoices")
+        self.tabs.addTab(self.chartsPage, "Charts")
         self.tabs.addTab(self.settingsPage, "Settings")
 
-        self._build_invoices_page()
+        self._build_main_page()
+        self._build_invoices_list_page()
         self._build_settings_page()
+        self._build_about_page()
+        self._build_charts_page()
+
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
         self.excel_data = None
         self.excel_file_path = None
         self.current_settings = {}
 
-    def _build_invoices_page(self):
+    def _build_charts_page(self):
+        layout = QVBoxLayout()
+        
+        # create matplotlib figure
+        self.figure = Figure(figsize=(6,4))
+        self.canvas = FigureCanvas(self.figure)
+        
+        layout.addWidget(self.canvas)
+        self.chartsPage.setLayout(layout)
+        
+        # optional: plot an initial example chart
+        self.plot_example_chart()
+
+    def plot_example_chart(self):
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        ax.plot([1,2,3,4,5], [10,20,15,25,30], marker='o')
+        ax.set_title("Example Chart")
+        ax.set_xlabel("X-axis")
+        ax.set_ylabel("Y-axis")
+        self.canvas.draw()
+    
+    def _build_about_page(self):
+        layout = QVBoxLayout()
+        about_text = QTextEdit()
+        about_text.setReadOnly(True)
+        about_text.setText("""
+            <h2>About Invoice App</h2>
+            <p><b>Version:</b> 1.0.0</p>
+            <p><b>Description:</b> A simple application for creating and managing invoices.</p>
+            <p><b>Author:</b> Your Name</p>
+            <p><b>Contact:</b> your.email@example.com</p>
+            <p><b>License:</b> MIT License</p>
+            <p>Built with PySide6, pandas, and fpdf2.</p>
+        """)
+        about_text.setStyleSheet("QTextEdit { border: 1px solid #ECF0F1; border-radius: 5px; padding: 10px; }")
+        layout.addWidget(about_text)
+        layout.addStretch()
+        self.aboutPage.setLayout(layout)
+
+    def _build_main_page(self):
         self.writeInvoicesButton = QPushButton("Write Invoices")
         self.writeInvoicesButton.setObjectName("writeInvoicesButton")
 
