@@ -1,11 +1,11 @@
 {
     "company": {
-        "name": "AnaSrl",
-        "cui": "wdws"
+        "name": "RazvanSRL",
+        "cui": "CUI"
     },
     "seller": {
-        "legal_id": "sas",
-        "vat": "random",
+        "legal_id": "1234",
+        "vat": "5678",
         "street": "brasov",
         "city": "bucuresti",
         "county": "bucuresti",

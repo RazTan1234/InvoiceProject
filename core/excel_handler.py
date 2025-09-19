@@ -7,9 +7,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Calea către folderul principal al proiectului
 PROJECT_DIR = os.path.join(BASE_DIR, "..")  # urcă un nivel
 
-# Fixed path construction - let the function take file_path as parameter
 def get_default_file_path():
-    """Returns the default Excel file path"""
+    """Returnează calea implicită către fișierul Excel"""
     return os.path.join(PROJECT_DIR, "data", "input_samples", "Facturi_Test.xlsx")
 
 def read_excel(file_path=None):
@@ -20,9 +19,9 @@ def read_excel(file_path=None):
     # Check if file exists
     if not os.path.exists(file_path):
         print(f"✗ Fișierul nu există: {file_path}")
-        print(f"✓ Directorul curent: {os.getcwd()}")
-        print(f"✓ BASE_DIR: {BASE_DIR}")
-        print(f"✓ PROJECT_DIR: {PROJECT_DIR}")
+        print(f"✔ Directorul curent: {os.getcwd()}")
+        print(f"✔ BASE_DIR: {BASE_DIR}")
+        print(f"✔ PROJECT_DIR: {PROJECT_DIR}")
         
         # Try to find the file in current directory or subdirectories
         current_dir = os.getcwd()
@@ -30,19 +29,19 @@ def read_excel(file_path=None):
             for file in files:
                 if file.endswith('.xlsx') and 'Facturi' in file:
                     found_path = os.path.join(root, file)
-                    print(f"✓ Am găsit un fișier Excel similar: {found_path}")
+                    print(f"✔ Am găsit un fișier Excel similar: {found_path}")
         
         return None
     
     try:
         df = pd.read_excel(file_path)
-        print(f"✓ Fișierul Excel a fost citit cu succes: {len(df)} înregistrări")
-        print(f"✓ Calea fișierului: {os.path.abspath(file_path)}")
+        print(f"✔ Fișierul Excel a fost citit cu succes: {len(df)} înregistrări")
+        print(f"✔ Calea fișierului: {os.path.abspath(file_path)}")
     except Exception as e:
         print(f"✗ Eroare la citirea fișierului: {e}")
         return None
     
-    # Coloanele necesare pentru generarea facturilor (doar cele introduse de user)
+    # Coloanele necesare pentru generarea facturilor (seller columns removed)
     required_columns = [
         "Număr factură", "Data emiterii", "Tip factură", "Monedă",
         "Nume cumpărător", "ID legal cumpărător", "ID TVA cumpărător",
@@ -61,16 +60,15 @@ def read_excel(file_path=None):
             print(f"  {i}. {col}")
         return None
     
-    print("✓ Toate coloanele necesare sunt prezente")
+    print("✔ Toate coloanele necesare sunt prezente")
     return df
 
 def count_products(lines_str):
     """Numără produsele din coloana 'Linii factură (produse)'."""
     if pd.isna(lines_str) or not lines_str:
         return 0
-    # Produsele sunt separate prin ";"
     products = lines_str.split(";")
-    return len([p for p in products if p.strip()])  # Numără doar liniile non-goale
+    return len([p for p in products if p.strip()])
 
 def validate_invoice_data(df):
     """Validează datele facturilor și returnează un raport."""
@@ -79,12 +77,10 @@ def validate_invoice_data(df):
     for index, row in df.iterrows():
         invoice_num = row["Număr factură"]
         
-        # Verifică dacă sunt produse
         num_products = count_products(row["Linii factură (produse)"])
         if num_products == 0:
             issues.append(f"Factura {invoice_num}: Nu are produse definite")
         
-        # Verifică totalurile
         try:
             total_no_vat = float(row["Valoare totală fără TVA"])
             total_vat = float(row["Total TVA"])
@@ -95,7 +91,6 @@ def validate_invoice_data(df):
         except (ValueError, TypeError):
             issues.append(f"Factura {invoice_num}: Valori totale invalide")
         
-        # Verifică datele obligatorii (removed seller fields since they come from settings)
         required_fields = ["Nume cumpărător", "Data emiterii"]
         for field in required_fields:
             if pd.isna(row[field]) or str(row[field]).strip() == "":
@@ -129,20 +124,15 @@ if __name__ == "__main__":
     df = read_excel()
     
     if df is not None:
-        # Afișează sumarul facturilor
         print_invoice_summary(df)
-        
-        # Validează datele
         print(f"\n{'='*50}")
         print("VALIDARE DATE")
         print(f"{'='*50}")
-        
         issues = validate_invoice_data(df)
         if issues:
-            print("⚠️ Probleme găsite:")
+            print("⚠ Probleme găsite:")
             for issue in issues:
                 print(f"  - {issue}")
         else:
             print("✅ Toate datele sunt valide!")
-        
         print(f"\nFacturile sunt gata pentru generarea PDF!")
