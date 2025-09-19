@@ -3,13 +3,9 @@ import os
 from PySide6.QtWidgets import QApplication
 
 def main():
-    # Fix for display issues on Linux/WSL - force X11 platform
     os.environ['QT_QPA_PLATFORM'] = 'xcb'
-    
     try:
         app = QApplication(sys.argv)
-
-        # Check if styles file exists
         styles_path = "UI/styles.qss"
         if os.path.exists(styles_path):
             with open(styles_path, "r") as f:
@@ -17,8 +13,6 @@ def main():
         else:
             print(f"\nStyle file not found: {styles_path}")
             print("Continuing without custom styles...")
-
-        # Import here to avoid issues if UI modules have problems
         try:
             from UI.main_window import MainWindow
             win = MainWindow()
@@ -30,9 +24,7 @@ def main():
         except Exception as e:
             print(f"Error creating main window: {e}")
             return
-
         sys.exit(app.exec())
-        
     except Exception as e:
         print(f"\n Error starting application: {e}")
         print("\nTroubleshooting tips:")

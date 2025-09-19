@@ -5,8 +5,8 @@
     },
     "seller": {
         "legal_id": "sas",
-        "vat": "nustiu",
-        "street": "lainici",
+        "vat": "random",
+        "street": "brasov",
         "city": "bucuresti",
         "county": "bucuresti",
         "country": "romania"

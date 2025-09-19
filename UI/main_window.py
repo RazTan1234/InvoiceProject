@@ -6,8 +6,10 @@ from PySide6.QtCore import Qt
 import os
 import subprocess
 import sys
+import pandas as pd
 
-from core import excel_handler, pdf_generator, settings_handler, excel_template
+from core import excel_handler, pdf_generator, settings_handler
+from UI.table_window import InvoiceTableDialog
 
 
 class MainWindow(QMainWindow):
@@ -102,6 +104,7 @@ class MainWindow(QMainWindow):
 
     def _build_settings_page(self):
         layout = QFormLayout()
+
         self.companyName = QLineEdit()
         self.companyName.setPlaceholderText("Company name")
         self.companyCUI = QLineEdit()
@@ -152,8 +155,8 @@ class MainWindow(QMainWindow):
         msg.setText("Choose an option:")
         msg.setIcon(QMessageBox.Question)
 
-        import_btn = msg.addButton("Import Excel", QMessageBox.AcceptRole)
-        open_btn = msg.addButton("New Excel", QMessageBox.ActionRole)
+        import_btn = msg.addButton("Import File", QMessageBox.AcceptRole)
+        open_btn = msg.addButton("New Table", QMessageBox.ActionRole)
         cancel_btn = msg.addButton("Cancel", QMessageBox.RejectRole)
 
         msg.exec()
@@ -164,31 +167,39 @@ class MainWindow(QMainWindow):
             self.open_excel()
 
     def open_excel(self):
-        file_path = excel_template.create_excel_template()
-        self._show_info(f"Excel template creat și deschis:\n{file_path}")
+        dialog = InvoiceTableDialog(self)
+        dialog.exec()
 
     def import_excel(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Excel File", "", "Excel Files (*.xlsx *.xls)"
+            self, "Select File", "", "Data Files (*.xlsx *.xls *.csv)"
         )
         if file_path:
             try:
-                self.excel_data = excel_handler.read_excel(file_path)
+                if file_path.endswith(".csv"):
+                    self.excel_data = pd.read_csv(file_path)
+                else:
+                    self.excel_data = excel_handler.read_excel(file_path)
+
                 if self.excel_data is not None:
                     self.excel_file_path = file_path
                     filename = os.path.basename(file_path)
+                    rows_count = len(self.excel_data)
                     self.fileLabel.setText(f"✓ {filename}")
-                    self._show_info(f"Successfully imported {len(self.excel_data)} invoices from {filename}")
+                    if rows_count > 0:
+                        self._show_info(f"Successfully imported {rows_count} invoices from {filename}")
+                    else:
+                        self._show_info(f"File imported successfully but contains no invoices.")
                 else:
                     self.fileLabel.setText("✗ Failed to load file")
-                    self._show_error("Failed to read Excel file. Please check the file format and required columns.")
+                    self._show_error("Failed to read file. Please check the format and required columns.")
             except Exception as e:
                 self.fileLabel.setText("✗ Error loading file")
-                self._show_error(f"Error importing Excel file:\n{str(e)}")
+                self._show_error(f"Error importing file:\n{str(e)}")
 
     def generate_pdfs(self):
         if self.excel_data is None or self.excel_data.empty:
-            self._show_error("Please import an Excel file first!")
+            self._show_error("Please import a file first!")
             return
         try:
             seller_settings = None
@@ -196,14 +207,13 @@ class MainWindow(QMainWindow):
                 seller_settings = self.current_settings.get('seller', {})
                 if 'company' in self.current_settings:
                     seller_settings['name'] = self.current_settings['company'].get('name', '')
-
             generated_files = pdf_generator.generate_all_invoices(self.excel_data, seller_settings)
             if len(generated_files) > 0:
                 self._show_info(f"Successfully generated {len(generated_files)} PDF invoices!\n\nFiles saved to: data/output_pdfs/")
                 self.load_pdfs()
                 self.tabs.setCurrentWidget(self.invoicesListPage)
             else:
-                self._show_error("No PDF files were generated. Please check your Excel data.")
+                self._show_error("No PDF files were generated. Please check your data.")
         except Exception as e:
             self._show_error(f"Error generating PDFs:\n{str(e)}")
 
