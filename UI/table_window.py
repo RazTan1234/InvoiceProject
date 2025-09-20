@@ -1,16 +1,26 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
-    QFileDialog, QMessageBox, QHeaderView, QTableWidgetItem
+    QMessageBox, QHeaderView, QTableWidgetItem, QLabel, QItemDelegate
 )
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QDoubleValidator
 import pandas as pd
+import core.db_handler as db
 
+class DoubleDelegate(QItemDelegate):
+    """Delegate to enforce numeric input for specific columns"""
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        validator = QDoubleValidator()
+        validator.setNotation(QDoubleValidator.StandardNotation)
+        editor.setValidator(validator)
+        return editor
 
 class InvoiceTableDialog(QDialog):
     def __init__(self, parent=None, import_data=None):
         super().__init__(parent)
-        self.setWindowTitle("Invoice Table")
+        self.setWindowTitle("Invoice Table - Database Edition")
         self.resize(1200, 700)
 
         self.setWindowFlags(self.windowFlags() | Qt.WindowMinMaxButtonsHint)
@@ -18,13 +28,12 @@ class InvoiceTableDialog(QDialog):
         self.setMinimumSize(800, 400)
         self.showMaximized()
 
-        # Track saved data for parent access
         self.saved_data = None
         self.saved_file_path = None
 
         self.columns = [
             "Număr factură",
-            "Data emiterii",
+            "Data emiterii", 
             "Tip factură",
             "Monedă",
             "Nume cumpărător",
@@ -44,13 +53,21 @@ class InvoiceTableDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # Create table with all columns if importing data
+        if import_data is not None:
+            info_text = f"Editing {len(import_data)} invoices from database"
+        else:
+            info_text = "Creating new invoices - data will be saved to database"
+            
+        self.info_label = QLabel(info_text)
+        self.info_label.setStyleSheet("font-weight: bold; padding: 5px; background-color: #e8f4f8; border-radius: 4px;")
+        layout.addWidget(self.info_label)
+
         if import_data is not None:
             self.table = QTableWidget(max(100, len(import_data) + 20), len(self.columns))
         else:
             self.table = QTableWidget(100, len(self.columns))
         
-        self.table.setHorizontalHeaderLabels(self.columns)
+        self.table.setHorizontalHeaderLabels([f"{col} *" if col in ["Număr factură", "Data emiterii", "Nume cumpărător"] else col for col in self.columns])
 
         header_font = QFont()
         header_font.setBold(True)
@@ -65,7 +82,11 @@ class InvoiceTableDialog(QDialog):
         for i, col in enumerate(self.columns):
             self.table.horizontalHeaderItem(i).setToolTip(col)
 
-        # Populate table with imported data if provided
+        # Set numeric validator for total columns
+        for col_name in ["Valoare totală fără TVA", "Total TVA", "Total plată"]:
+            col_idx = self.columns.index(col_name)
+            self.table.setItemDelegateForColumn(col_idx, DoubleDelegate(self))
+
         if import_data is not None:
             self.populate_table_with_data(import_data)
 
@@ -73,8 +94,14 @@ class InvoiceTableDialog(QDialog):
         layout.addWidget(self.table)
 
         button_layout = QHBoxLayout()
-        self.saveButton = QPushButton("Save")
-        self.useDataButton = QPushButton("Use Data")
+        
+        if import_data is not None:
+            self.updateDbButton = QPushButton("Update Database")
+            self.useDataButton = QPushButton("Use for PDF Generation")
+        else:
+            self.saveToDbButton = QPushButton("Save to Database")
+            self.useDataButton = QPushButton("Use for PDF Generation")
+        
         self.cancelButton = QPushButton("Cancel")
 
         button_style = """
@@ -93,26 +120,32 @@ class InvoiceTableDialog(QDialog):
                 background-color: #483D8B;
             }
         """
-        self.saveButton.setStyleSheet(button_style)
+        
+        if import_data is not None:
+            self.updateDbButton.setStyleSheet(button_style)
+            button_layout.addWidget(self.updateDbButton)
+            self.updateDbButton.clicked.connect(self.update_database)
+        else:
+            self.saveToDbButton.setStyleSheet(button_style)
+            button_layout.addWidget(self.saveToDbButton)
+            self.saveToDbButton.clicked.connect(self.save_to_database)
+        
         self.useDataButton.setStyleSheet(button_style)
         self.cancelButton.setStyleSheet(button_style)
 
         button_layout.addStretch()
-        button_layout.addWidget(self.saveButton)
         button_layout.addWidget(self.useDataButton)
         button_layout.addWidget(self.cancelButton)
         button_layout.addStretch()
 
         layout.addLayout(button_layout)
 
-        self.saveButton.clicked.connect(self.save_table)
-        self.useDataButton.clicked.connect(self.use_data_without_saving)
+        self.useDataButton.clicked.connect(self.use_data_for_pdf)
         self.cancelButton.clicked.connect(self.reject)
 
     def populate_table_with_data(self, data):
-        """Populate the table with imported data"""
+        """Populate the table with imported data from database"""
         try:
-            # Ensure we have enough rows
             if len(data) > self.table.rowCount():
                 self.table.setRowCount(len(data) + 20)
 
@@ -123,18 +156,17 @@ class InvoiceTableDialog(QDialog):
                         item = QTableWidgetItem(value)
                         self.table.setItem(row_idx, col_idx, item)
                     else:
-                        # Set empty item for missing columns
                         item = QTableWidgetItem("")
                         self.table.setItem(row_idx, col_idx, item)
 
-            # Update window title to show imported data
-            self.setWindowTitle("Invoice Table - Imported Data")
+            self.info_label.setText(f"Loaded {len(data)} invoices from database - you can edit and save changes")
             
         except Exception as e:
             QMessageBox.warning(self, "Import Error", f"Error populating table:\n{str(e)}")
 
     def extend_rows_if_needed(self, row, col):
-        if row == self.table.rowCount() - 1:
+        """Add more rows if user is entering data near the bottom"""
+        if row >= self.table.rowCount() - 5:
             self.table.setRowCount(self.table.rowCount() + 20)
 
     def get_table_data_as_dataframe(self):
@@ -156,48 +188,128 @@ class InvoiceTableDialog(QDialog):
 
         if data:
             return pd.DataFrame(data, columns=self.columns)
-        else:
-            return None
+        return None
 
-    def use_data_without_saving(self):
-        """Use the current table data without saving to file"""
-        try:
-            df = self.get_table_data_as_dataframe()
-            if df is not None and not df.empty:
-                self.saved_data = df
-                self.saved_file_path = None  # No file path since we're not saving
-                QMessageBox.information(self, "Success", f"Using {len(df)} rows of data for invoice generation.")
-                self.accept()
-            else:
-                QMessageBox.warning(self, "No Data", "No data found in the table.")
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Could not process table data:\n{str(e)}")
-
-    def save_table(self):
-        """Save table data to Excel file for compatibility with import"""
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Table", "", "Excel Files (*.xlsx);;CSV Files (*.csv)"
-        )
-        if path:
+    def validate_invoice_data(self, df):
+        """Validate invoice data before saving"""
+        errors = []
+        invalid_cells = []
+        
+        for idx, row in df.iterrows():
+            invoice_num = row.get("Număr factură", "")
+            
+            if not invoice_num.strip():
+                errors.append(f"Row {idx + 1}: Missing invoice number")
+                invalid_cells.append((idx, self.columns.index("Număr factură")))
+                continue
+                
+            if not row.get("Data emiterii", "").strip():
+                errors.append(f"Invoice {invoice_num}: Missing issue date")
+                invalid_cells.append((idx, self.columns.index("Data emiterii")))
+                
+            if not row.get("Nume cumpărător", "").strip():
+                errors.append(f"Invoice {invoice_num}: Missing buyer name")
+                invalid_cells.append((idx, self.columns.index("Nume cumpărător")))
+                
             try:
-                df = self.get_table_data_as_dataframe()
-                if df is not None and not df.empty:
-                    if path.lower().endswith('.xlsx'):
-                        # Save as Excel file
-                        df.to_excel(path, index=False, engine='openpyxl')
-                    else:
-                        # Save as CSV file
-                        if not path.lower().endswith('.csv'):
-                            path += ".csv"
-                        df.to_csv(path, index=False, encoding="utf-8-sig")
+                total_no_vat = float(row.get("Valoare totală fără TVA", 0) or 0)
+                total_vat = float(row.get("Total TVA", 0) or 0)
+                total_payment = float(row.get("Total plată", 0) or 0)
+                
+                if abs((total_no_vat + total_vat) - total_payment) > 0.01:
+                    errors.append(f"Invoice {invoice_num}: Total amounts don't match")
+                    invalid_cells.extend([
+                        (idx, self.columns.index("Valoare totală fără TVA")),
+                        (idx, self.columns.index("Total TVA")),
+                        (idx, self.columns.index("Total plată"))
+                    ])
                     
-                    # Store the data for parent access
-                    self.saved_data = df
-                    self.saved_file_path = path
-                    
-                    QMessageBox.information(self, "Success", f"Table saved as:\n{path}")
-                    self.accept()
-                else:
-                    QMessageBox.warning(self, "No Data", "No data found in the table to save.")
+            except (ValueError, TypeError):
+                errors.append(f"Invoice {invoice_num}: Invalid numeric values in totals")
+                invalid_cells.extend([
+                    (idx, self.columns.index("Valoare totală fără TVA")),
+                    (idx, self.columns.index("Total TVA")),
+                    (idx, self.columns.index("Total plată"))
+                ])
+        
+        # Highlight invalid cells
+        for row, col in invalid_cells:
+            item = self.table.item(row, col)
+            if item:
+                item.setBackground(QColor(255, 200, 200))  # Light red background
+        
+        return errors
+
+    def save_to_database(self):
+        """Save new table data to database"""
+        df = self.get_table_data_as_dataframe()
+        if df is not None and not df.empty:
+            # Clear previous highlights
+            for row in range(self.table.rowCount()):
+                for col in range(self.table.columnCount()):
+                    item = self.table.item(row, col)
+                    if item:
+                        item.setBackground(QColor(255, 255, 255))
+            
+            # Validate data
+            errors = self.validate_invoice_data(df)
+            if errors:
+                error_msg = "Data validation errors:\n\n" + "\n".join(errors[:10])
+                if len(errors) > 10:
+                    error_msg += f"\n\n...and {len(errors) - 10} more errors"
+                QMessageBox.warning(self, "Validation Errors", error_msg)
+                return
+                
+            try:
+                saved_count = 0
+                for _, row in df.iterrows():
+                    data = {col: row[col] for col in df.columns}
+                    db.insert_invoice(data)
+                    saved_count += 1
+
+                self.saved_data = df
+                self.saved_file_path = None
+
+                QMessageBox.information(self, "Success", f"{saved_count} invoices saved to database successfully!")
+                self.accept()
+                
             except Exception as e:
-                QMessageBox.warning(self, "Error", f"Could not save file:\n{str(e)}")
+                print(f"Database error details: {str(e)}")  # Log for debugging
+                QMessageBox.warning(self, "Database Error", f"Error saving to database:\n{str(e)}")
+        else:
+            QMessageBox.warning(self, "No Data", "No data to save to database.")
+
+    def update_database(self):
+        """Placeholder for updating existing database records"""
+        QMessageBox.information(self, "Info", "Update functionality will be implemented in future version.\nFor now, this will create new records.")
+        self.save_to_database()
+
+    def use_data_for_pdf(self):
+        """Use current table data for PDF generation without saving to database"""
+        df = self.get_table_data_as_dataframe()
+        if df is not None and not df.empty:
+            # Clear previous highlights
+            for row in range(self.table.rowCount()):
+                for col in range(self.table.columnCount()):
+                    item = self.table.item(row, col)
+                    if item:
+                        item.setBackground(QColor(255, 255, 255))
+            
+            errors = self.validate_invoice_data(df)
+            if errors:
+                error_msg = "Data validation warnings:\n\n" + "\n".join(errors[:5])
+                if len(errors) > 5:
+                    error_msg += f"\n\n...and {len(errors) - 5} more warnings"
+                error_msg += "\n\nDo you want to proceed with PDF generation anyway?"
+                
+                reply = QMessageBox.question(self, "Validation Warnings", error_msg, 
+                                           QMessageBox.Yes | QMessageBox.No)
+                if reply == QMessageBox.No:
+                    return
+                    
+            self.saved_data = df
+            self.saved_file_path = None
+            QMessageBox.information(self, "Success", f"Using {len(df)} invoices for PDF generation.")
+            self.accept()
+        else:
+            QMessageBox.warning(self, "No Data", "No data available for PDF generation.")

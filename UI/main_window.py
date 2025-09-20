@@ -1,43 +1,50 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QTabWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFileDialog, QMessageBox, QLineEdit, QFormLayout, QListWidget
+    QPushButton, QLabel, QMessageBox, QLineEdit, QFormLayout, QListWidget
 )
 from PySide6.QtCore import Qt
 import os
 import subprocess
 import sys
 import pandas as pd
-from PySide6.QtWidgets import QVBoxLayout, QLabel
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from core import excel_handler, pdf_generator, settings_handler
+from core import db_handler, pdf_generator, settings_handler
 from UI.table_window import InvoiceTableDialog
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Invoice App")
+        self.setWindowTitle("Invoice App - Database Edition")
         self.resize(900, 600)
+        
+        # Initialize database
+        db_handler.create_db()
+        
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
+        
         self.mainPage = QWidget()
         self.invoicesListPage = QWidget()
         self.settingsPage = QWidget()
+        self.aboutPage = QWidget()
+        self.statsPage = QWidget()
+        
         self.tabs.addTab(self.mainPage, "Main")
         self.tabs.addTab(self.invoicesListPage, "Invoices")
         self.tabs.addTab(self.settingsPage, "Settings")
-        self.aboutPage = QWidget()
         self.tabs.addTab(self.aboutPage, "About Us")
-        self.statsPage = QWidget()
         self.tabs.addTab(self.statsPage, "Statistics")
+        
         self._build_main_page()
         self._build_about_page()
         self._build_stats_page()
         self._build_invoices_list_page()
         self._build_settings_page()
+        
         self.tabs.currentChanged.connect(self.on_tab_changed)
-        self.excel_data = None
-        self.excel_file_path = None
+        
+        self.invoice_data = None
         self.current_settings = self.load_settings_from_file()
 
     def _build_stats_page(self):
@@ -49,13 +56,11 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-size: 24px; font-weight: bold; color: #fff;")
         title.setAlignment(Qt.AlignCenter)
 
-        # Labels pentru statistici
         self.totalInvoicesLabel = QLabel("Total invoices: 0")
         self.totalInvoicesLabel.setStyleSheet("font-size: 14px; color: #fff;")
         self.totalAmountLabel = QLabel("Total amount: 0 RON")
         self.totalAmountLabel.setStyleSheet("font-size: 14px; color: #fff;")
 
-        # Canvas pentru grafic
         self.figure = Figure(figsize=(5,3))
         self.canvas = FigureCanvas(self.figure)
 
@@ -77,11 +82,12 @@ class MainWindow(QMainWindow):
         title.setAlignment(Qt.AlignCenter)
 
         content = QLabel(
-                "Invoice App v1.0\n\n"
-                "Această aplicație a fost creată pentru a simplifica generarea facturilor PDF.\n\n"
-                "Echipa noastră se concentrează pe soluții software eficiente, moderne și intuitive.\n\n"
-                "Contact: support@invoiceapp.com"
-            )
+            "Invoice App v2.0 - Database Edition\n\n"
+            "Această aplicație folosește o bază de date SQLite pentru stocarea facturilor.\n\n"
+            "Datele sunt gestionate exclusiv în baza de date, fără dependențe de fișiere Excel/CSV.\n\n"
+            "Echipa noastră se concentrează pe soluții software eficiente, moderne și intuitive.\n\n"
+            "Contact: support@invoiceapp.com"
+        )
         content.setWordWrap(True)
         content.setStyleSheet("font-size: 14px; color: #fff;")
         content.setAlignment(Qt.AlignTop)
@@ -93,25 +99,34 @@ class MainWindow(QMainWindow):
         self.aboutPage.setLayout(layout)
 
     def _build_main_page(self):
-        self.writeInvoicesButton = QPushButton("Write Invoices")
-        self.writeInvoicesButton.setObjectName("writeInvoicesButton")
+        self.newInvoiceButton = QPushButton("New Invoice")
+        self.newInvoiceButton.setObjectName("newInvoiceButton")
+        self.loadFromDbButton = QPushButton("Load from Database")
+        self.loadFromDbButton.setObjectName("loadFromDbButton")
         self.generateButton = QPushButton("Generate PDFs")
         self.generateButton.setObjectName("generateButton")
+        
         buttonLayout = QHBoxLayout()
         buttonLayout.setSpacing(30)
         buttonLayout.addStretch()
-        buttonLayout.addWidget(self.writeInvoicesButton)
+        buttonLayout.addWidget(self.newInvoiceButton)
+        buttonLayout.addWidget(self.loadFromDbButton)
         buttonLayout.addWidget(self.generateButton)
         buttonLayout.addStretch()
-        self.writeInvoicesButton.clicked.connect(self.show_write_invoices_popup)
-        self.fileLabel = QLabel("No file selected")
-        self.fileLabel.setObjectName("fileLabel")
-        self.fileLabel.setAlignment(Qt.AlignCenter)
+        
+        self.newInvoiceButton.clicked.connect(self.show_new_invoice_table)
+        self.loadFromDbButton.clicked.connect(self.load_from_database)
+        
+        self.statusLabel = QLabel("Ready - No invoices loaded")
+        self.statusLabel.setObjectName("statusLabel")
+        self.statusLabel.setAlignment(Qt.AlignCenter)
+        
         layout = QVBoxLayout()
         layout.addStretch()
         layout.addLayout(buttonLayout)
-        layout.addWidget(self.fileLabel, alignment=Qt.AlignCenter)
+        layout.addWidget(self.statusLabel, alignment=Qt.AlignCenter)
         layout.addStretch()
+        
         self.mainPage.setLayout(layout)
         self.generateButton.clicked.connect(self.generate_pdfs)
 
@@ -133,21 +148,23 @@ class MainWindow(QMainWindow):
 
     def open_pdf(self, item):
         filepath = os.path.abspath(os.path.join("data/output_pdfs", item.text()))
-        if sys.platform.startswith("linux"):
-            if "microsoft" in os.uname().release.lower():
-                if filepath.startswith("/mnt/"):
-                    drive = filepath[5]
-                    win_path = drive.upper() + ":" + filepath[6:]
-                    win_path = win_path.replace("/", "\\")
+        try:
+            if sys.platform.startswith("linux"):
+                if "microsoft" in os.uname().release.lower():
+                    if filepath.startswith("/mnt/"):
+                        drive = filepath[5]
+                        win_path = drive.upper() + ":" + filepath[6:].replace("/", "\\")
+                    else:
+                        win_path = filepath.replace("/", "\\")
+                    subprocess.run(["cmd.exe", "/c", "start", "", win_path], check=True)
                 else:
-                    win_path = filepath.replace("/", "\\")
-                subprocess.Popen(["cmd.exe", "/c", "start", "", win_path])
-            else:
-                subprocess.Popen(["xdg-open", filepath])
-        elif sys.platform == "win32":
-            os.startfile(filepath)
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", filepath])
+                    subprocess.run(["xdg-open", filepath], check=True)
+            elif sys.platform == "win32":
+                os.startfile(filepath)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", filepath], check=True)
+        except Exception as e:
+            self._show_error(f"Failed to open PDF: {e}")
 
     def _build_settings_page(self):
         layout = QFormLayout()
@@ -196,107 +213,86 @@ class MainWindow(QMainWindow):
         self.settingsPage.setLayout(layout)
         self.load_settings_from_file()
 
-
-    def show_write_invoices_popup(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Write Invoices")
-        msg.setText("Choose an option:")
-        msg.setIcon(QMessageBox.Question)
-        import_btn = msg.addButton("Import File", QMessageBox.AcceptRole)
-        open_btn = msg.addButton("New Table", QMessageBox.ActionRole)
-        cancel_btn = msg.addButton("Cancel", QMessageBox.RejectRole)
-        msg.exec()
-        clicked = msg.clickedButton()
-        if clicked == import_btn:
-            self.import_and_show_table()
-        elif clicked == open_btn:
-            self.open_excel()
-
-    def open_excel(self):
+    def show_new_invoice_table(self):
+        """Show empty table for creating new invoices"""
         dialog = InvoiceTableDialog(self)
         if dialog.exec():
             if hasattr(dialog, 'saved_data') and dialog.saved_data is not None:
-                self.excel_data = dialog.saved_data
-                self.excel_file_path = dialog.saved_file_path
-                filename = os.path.basename(dialog.saved_file_path) if dialog.saved_file_path else "New Table"
-                rows_count = len(self.excel_data)
-                self.fileLabel.setText(f"✓ {filename}")
-                if rows_count > 0:
-                    self._show_info(f"Successfully created {rows_count} invoices from table")
+                self.invoice_data = dialog.saved_data
+                rows_count = len(self.invoice_data)
+                self.statusLabel.setText(f"✓ {rows_count} new invoices ready for PDF generation")
+                self._show_info(f"Successfully created {rows_count} invoices")
 
-    def import_and_show_table(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select File to Import", "", "Data Files (*.xlsx *.xls *.csv)"
-        )
-        if file_path:
-            try:
-                if file_path.endswith(".csv"):
-                    data = pd.read_csv(file_path)
-                else:
-                    data = excel_handler.read_excel(file_path)
-                if data is not None:
-                    dialog = InvoiceTableDialog(self, import_data=data)
-                    if dialog.exec():
-                        if hasattr(dialog, 'saved_data') and dialog.saved_data is not None:
-                            self.excel_data = dialog.saved_data
-                            self.excel_file_path = dialog.saved_file_path
-                            filename = os.path.basename(dialog.saved_file_path) if dialog.saved_file_path else "Imported Table"
-                            rows_count = len(self.excel_data)
-                            self.fileLabel.setText(f"✓ {filename}")
-                            if rows_count > 0:
-                                self._show_info(f"Successfully imported and processed {rows_count} invoices from {filename}")
-                else:
-                    self._show_error("Failed to read file. Please check the format and required columns.")
-            except Exception as e:
-                self._show_error(f"Error importing file:\n{str(e)}")
-
-    def import_excel(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select File", "", "Data Files (*.xlsx *.xls *.csv)"
-        )
-        if file_path:
-            try:
-                if file_path.endswith(".csv"):
-                    self.excel_data = pd.read_csv(file_path)
-                else:
-                    self.excel_data = excel_handler.read_excel(file_path)
-                if self.excel_data is not None:
-                    self.excel_file_path = file_path
-                    filename = os.path.basename(file_path)
-                    rows_count = len(self.excel_data)
-                    self.fileLabel.setText(f"✓ {filename}")
-                    if rows_count > 0:
-                        self._show_info(f"Successfully imported {rows_count} invoices from {filename}")
-                    else:
-                        self._show_info(f"File imported successfully but contains no invoices.")
-                else:
-                    self.fileLabel.setText("✗ Failed to load file")
-                    self._show_error("Failed to read file. Please check the format and required columns.")
-            except Exception as e:
-                self.fileLabel.setText("✗ Error loading file")
-                self._show_error(f"Error importing file:\n{str(e)}")
+    def load_from_database(self):
+        """Load existing invoices from database"""
+        try:
+            df = db_handler.get_all_invoices()
+            if df is not None and not df.empty:
+                dialog = InvoiceTableDialog(self, import_data=df)
+                if dialog.exec():
+                    if hasattr(dialog, 'saved_data') and dialog.saved_data is not None:
+                        self.invoice_data = dialog.saved_data
+                        rows_count = len(self.invoice_data)
+                        self.statusLabel.setText(f"✓ Loaded {rows_count} invoices from database")
+                        self._show_info(f"Successfully loaded {rows_count} invoices from database")
+            else:
+                self.statusLabel.setText("Database is empty")
+                self._show_info("No invoices found in the database. Create new invoices first.")
+        except Exception as e:
+            self._show_error(f"Error loading invoices from database: {e}")
 
     def generate_pdfs(self):
-        if self.excel_data is None or self.excel_data.empty:
-            self._show_error("Please import a file first!")
+        """Generate PDF invoices from current data"""
+        if self.invoice_data is None or self.invoice_data.empty:
+            self._show_error("Please load invoices from database or create new ones first!")
             return
+        
         try:
             user_settings = settings_handler.load_settings()
             if not user_settings.get('company', {}).get('name') or not user_settings.get('seller', {}):
                 self._show_warning("Settings are incomplete. Some seller fields may show 'Nu este setat'.")
+            
             self.current_settings = user_settings
-            print(f"Generating PDFs with settings: {user_settings}")
-            generated_files = pdf_generator.generate_all_invoices(self.excel_data, user_settings)
+            generated_files = pdf_generator.generate_all_invoices(self.invoice_data, user_settings)
             if generated_files:
                 self._show_info(
-                    f"Successfully generated {len(generated_files)} PDF invoices!\n\nFiles saved to: data/output_pdfs/"
+                    f"Successfully generated {len(generated_files)} PDF invoices!\n\n"
+                    f"Files saved to: data/output_pdfs/"
                 )
                 self.load_pdfs()
                 self.tabs.setCurrentWidget(self.invoicesListPage)
+                self.update_stats()
             else:
                 self._show_error("No PDF files were generated. Please check your data.")
+                
         except Exception as e:
-            self._show_error(f"Error generating PDFs:\n{str(e)}")
+            self._show_error(f"Error generating PDFs: {e}")
+
+    def update_stats(self):
+        """Update statistics display"""
+        try:
+            stats = db_handler.get_invoice_stats()
+            
+            self.totalInvoicesLabel.setText(f"Total invoices: {stats['total_count']}")
+            self.totalAmountLabel.setText(f"Total amount: {stats['total_amount']:.2f} RON")
+            
+            if stats['monthly_data']:
+                self.figure.clear()
+                ax = self.figure.add_subplot(111)
+                
+                months = [data[0] for data in stats['monthly_data'][-6:]]
+                amounts = [data[2] for data in stats['monthly_data'][-6:]]
+                
+                ax.bar(months, amounts, color='#6A5ACD')
+                ax.set_title('Monthly Invoice Amounts (Last 6 Months)')
+                ax.set_ylabel('Amount (RON)')
+                ax.tick_params(axis='x', rotation=45)
+                
+                self.figure.tight_layout()
+                self.canvas.draw()
+                
+        except Exception as e:
+            print(f"Error updating stats: {e}")
 
     def _show_warning(self, message):
         msg = QMessageBox(self)
@@ -339,14 +335,13 @@ class MainWindow(QMainWindow):
             self.current_settings = settings
             self._show_info("Settings saved successfully!")
         except Exception as e:
-            self._show_error(f"Could not save settings:\n{e}")
+            self._show_error(f"Could not save settings: {e}")
 
     def load_settings_from_file(self):
         try:
             loaded = settings_handler.load_settings()
             if not isinstance(loaded, dict):
                 loaded = {}
-            print(f"Loaded settings: {loaded}")
             self.populate_settings_form(loaded)
             return loaded
         except Exception as e:
@@ -361,6 +356,7 @@ class MainWindow(QMainWindow):
                     return None
                 d = d.get(k)
             return d
+            
         self.companyName.setText(g("company", "name") or "")
         self.companyCUI.setText(g("company", "cui") or "")
         self.sellerLegalId.setText(g("seller", "legal_id") or "")
@@ -375,3 +371,5 @@ class MainWindow(QMainWindow):
             self.load_settings_from_file()
         elif index == self.tabs.indexOf(self.invoicesListPage):
             self.load_pdfs()
+        elif index == self.tabs.indexOf(self.statsPage):
+            self.update_stats()
