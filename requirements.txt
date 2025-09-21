@@ -1,8 +1,16 @@
 # UI - PySide6 pentru interfață grafică
 PySide6==6.*
 
-# Dacă vrei să testezi mock-urile din core (nu e obligatoriu)
+# Lucru cu tabele și date
 pandas
 openpyxl
+
+# Generare PDF
 reportlab
+fpdf2
+
+# Statistici și grafice
 matplotlib
+
+# Clipboard support (Copy-Paste în tabel)
+pyperclip
