@@ -252,12 +252,9 @@ class MainWindow(QMainWindow):
             df = db_handler.get_all_invoices()
             if df is not None and not df.empty:
                 dialog = InvoiceTableDialog(self, import_data=df)
-                if dialog.exec():
-                    if hasattr(dialog, 'saved_data') and dialog.saved_data is not None:
-                        self.invoice_data = dialog.saved_data
-                        rows_count = len(self.invoice_data)
-                        self.statusLabel.setText(f"✓ Loaded {rows_count} invoices from database")
-                        self._show_info(f"Successfully loaded {rows_count} invoices from database")
+                dialog.exec()
+                rows_count = len(df)
+                self.statusLabel.setText(f"✓ Loaded {rows_count} invoices from database")
             else:
                 self.statusLabel.setText("Database is empty")
                 self._show_info("No invoices found in the database. Create new invoices first.")
