@@ -14,7 +14,7 @@ def create_db():
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("""
-        CREATE TABLE IF NOT EXISTS invoices (
+        CREATE TABLE IF NOT EXISTS invoices (p
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             invoice_number TEXT NOT NULL,
             issue_date TEXT NOT NULL,
@@ -200,44 +200,103 @@ def delete_invoice(invoice_id: int):
         conn.close()
 
 def get_invoice_stats():
-    """Get statistics about invoices in database"""
+    """Return detailed statistics for invoices with advanced analysis"""
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         
-        # Total count
+        # Total facturi
         c.execute("SELECT COUNT(*) FROM invoices")
         total_count = c.fetchone()[0]
-        
-        # Total amount
-        c.execute("SELECT SUM(total_payment) FROM invoices WHERE total_payment IS NOT NULL")
-        result = c.fetchone()[0]
-        total_amount = result if result else 0
-        
-        # Monthly breakdown
+
+        # Total fără TVA
+        c.execute("SELECT SUM(total_no_vat) FROM invoices WHERE total_no_vat IS NOT NULL")
+        total_without_vat = c.fetchone()[0] or 0
+
+        # Total TVA
+        c.execute("SELECT SUM(total_vat) FROM invoices WHERE total_vat IS NOT NULL")
+        total_vat = c.fetchone()[0] or 0
+
+        # Total cu TVA
+        total_with_vat = total_without_vat + total_vat
+
+        # Medii pe factură
+        c.execute("SELECT AVG(total_no_vat), AVG(total_vat), AVG(total_payment) FROM invoices")
+        avg_no_vat, avg_vat, avg_payment = c.fetchone()
+        avg_no_vat = avg_no_vat or 0
+        avg_vat = avg_vat or 0
+        avg_payment = avg_payment or 0
+
+        # Distribuția TVA
         c.execute("""
-            SELECT substr(issue_date, 1, 7) as month, 
-                   COUNT(*) as count, 
-                   SUM(total_payment) as amount
-            FROM invoices 
-            WHERE issue_date IS NOT NULL 
-            GROUP BY substr(issue_date, 1, 7)
-            ORDER BY month DESC
-            LIMIT 12
+            SELECT AVG(CASE WHEN total_no_vat>0 THEN (total_vat/total_no_vat)*100 ELSE 0 END) FROM invoices
         """)
-        monthly_data = c.fetchall()
-        
+        avg_vat_percent = c.fetchone()[0] or 0
+
+        c.execute("SELECT COUNT(*) FROM invoices WHERE total_vat IS NULL OR total_vat=0")
+        pct_no_vat = (c.fetchone()[0] / total_count * 100) if total_count else 0
+
+        # Grafic lunar stacked Net + TVA și valoare medie pe lună
+        c.execute("""
+            SELECT substr(issue_date,1,7) as month,
+                   SUM(total_no_vat) as sum_no_vat,
+                   SUM(total_vat) as sum_vat,
+                   SUM(total_payment) as sum_with_vat,
+                   COUNT(*) as count,
+                   AVG(total_payment) as avg_payment
+            FROM invoices
+            WHERE issue_date IS NOT NULL
+            GROUP BY substr(issue_date,1,7)
+            ORDER BY month ASC
+        """)
+        monthly_rows = c.fetchall()
+        monthly_data = [(m[0], m[1], m[2], m[3]) for m in monthly_rows]  # stacked bar
+        monthly_count = [(m[0], m[4]) for m in monthly_rows]                # număr facturi
+        monthly_avg = [(m[0], m[5]) for m in monthly_rows]                  # media facturilor
+
+        # Creștere/scădere lunar (%) față de luna precedentă
+        monthly_growth = []
+        for i in range(1, len(monthly_rows)):
+            prev = monthly_rows[i-1][3]
+            curr = monthly_rows[i][3]
+            growth = ((curr - prev) / prev * 100) if prev else 0
+            monthly_growth.append((monthly_rows[i][0], growth))
+
+        # Top 5 clienți după valoare totală
+        c.execute("""
+            SELECT buyer_name, SUM(total_payment) as total 
+            FROM invoices
+            GROUP BY buyer_name
+            ORDER BY total DESC
+            LIMIT 5
+        """)
+        top_clients = c.fetchall()
+
         return {
             'total_count': total_count,
-            'total_amount': total_amount,
-            'monthly_data': monthly_data
+            'total_without_vat': total_without_vat,
+            'total_vat': total_vat,
+            'total_with_vat': total_with_vat,
+            'avg_no_vat': avg_no_vat,
+            'avg_vat': avg_vat,
+            'avg_payment': avg_payment,
+            'avg_vat_percent': avg_vat_percent,
+            'pct_no_vat': pct_no_vat,
+            'monthly_data': monthly_data,
+            'monthly_count': monthly_count,
+            'monthly_avg': monthly_avg,
+            'monthly_growth': monthly_growth,
+            'top_clients': top_clients
         }
+
     except Exception as e:
         print(f"Error getting stats: {e}")
-        return {'total_count': 0, 'total_amount': 0, 'monthly_data': []}
+        return {}
     finally:
         if 'conn' in locals():
             conn.close()
+
+
 
 if __name__ == "__main__":
     create_db()

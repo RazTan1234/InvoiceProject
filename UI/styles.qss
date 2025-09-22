@@ -1,3 +1,4 @@
+/* Global widget styling */
 QWidget {
     background-color: qlineargradient(
         spread:pad, x1:0, y1:0, x2:1, y2:1,
@@ -8,33 +9,39 @@ QWidget {
     font-size: 14px;
 }
 
+/* Tab widget pane */
 QTabWidget::pane {
     border: none;
     background: transparent;
 }
 
+/* Tab bar */
 QTabBar {
-    qproperty-expanding: 1;   /* taburile să ocupe toată bara */
+    qproperty-expanding: true;
 }
 
+/* Tab bar alignment */
 QTabWidget::tab-bar {
     alignment: center;
 }
 
+/* Individual tab styling */
 QTabBar::tab {
     background: transparent;
-    color: #aaa;
+    color: #aaaaaa;
     padding: 12px 24px;
     font-weight: bold;
     min-width: 0;
     width: 100%;
 }
 
+/* Selected tab styling */
 QTabBar::tab:selected {
-    color: #fff;
+    color: #ffffff;
     border-bottom: 3px solid #ff6ec7;
 }
 
+/* Push button styling */
 QPushButton {
     border: none;
     border-radius: 20px;
@@ -57,27 +64,57 @@ QPushButton:pressed {
     background-color: #7c3aed;
 }
 
+/* File label styling */
 QLabel#fileLabel {
-    color: #aaa;
+    color: #aaaaaa;
     font-style: italic;
     margin-top: 10px;
 }
 
+/* Statistics title styling */
+QLabel#statsTitle {
+    font-size: 28px;
+    font-weight: bold;
+    color: #ffffff;
+    padding: 10px;
+    background-color: qlineargradient(
+        spread:pad, x1:0, y1:0, x2:1, y2:0,
+        stop:0 #ff6ec7, stop:1 #8b5cf6
+    );
+    border-radius: 10px;
+}
+
+/* Statistics card styling */
+QLabel#statCard {
+    background: #2a2a3d;
+    border: 1px solid #444444;
+    border-radius: 12px;
+    padding: 15px;
+    color: #eeeeee;
+    font-size: 14px;
+    min-height: 100px;
+    text-align: center;
+    qproperty-alignment: AlignCenter;
+    qproperty-wordWrap: true;
+}
+
+/* Line edit styling */
 QLineEdit {
     background: #2a2a3d;
-    border: 1px solid #444;
+    border: 1px solid #444444;
     border-radius: 8px;
     padding: 6px 10px;
-    color: #eee;
+    color: #eeeeee;
 }
 QLineEdit:focus {
     border: 1px solid #ff6ec7;
     outline: none;
 }
 
+/* Message box styling */
 QMessageBox {
     background-color: #2a2a3d;
-    color: #eee;
+    color: #eeeeee;
 }
 QMessageBox QPushButton {
     border-radius: 16px;
@@ -96,6 +133,7 @@ QMessageBox QPushButton:hover {
     );
 }
 
+/* Save settings button styling */
 QPushButton#saveSettingsButton {
     min-width: 200px;
     background-color: qlineargradient(
@@ -112,4 +150,44 @@ QPushButton#saveSettingsButton:hover {
         spread:pad, x1:0, y1:0, x2:1, y2:0,
         stop:0 #ff85d0, stop:1 #a78bfa
     );
+}
+
+/* Statistics canvas styling */
+QWidget#statsCanvas {
+    background: #2a2a3d;
+    border-radius: 12px;
+    padding: 10px;
+    border: 1px solid #444444;
+}
+
+/* Scroll area styling */
+QScrollArea#statsScrollArea {
+    background: transparent;
+    border: none;
+}
+
+/* Scrollbar styling */
+QScrollArea#statsScrollArea QScrollBar:vertical {
+    border: none;
+    background: #2a2a3d;
+    width: 12px;
+    margin: 0px;
+    border-radius: 6px;
+}
+QScrollArea#statsScrollArea QScrollBar::handle:vertical {
+    background: qlineargradient(
+        spread:pad, x1:0, y1:0, x2:1, y2:0,
+        stop:0 #ff6ec7, stop:1 #8b5cf6
+    );
+    border-radius: 6px;
+    min-height: 20px;
+}
+QScrollArea#statsScrollArea QScrollBar::add-line:vertical,
+QScrollArea#statsScrollArea QScrollBar::sub-line:vertical {
+    background: none;
+    height: 0px;
+}
+QScrollArea#statsScrollArea QScrollBar::add-page:vertical,
+QScrollArea#statsScrollArea QScrollBar::sub-page:vertical {
+    background: #242038;
 }

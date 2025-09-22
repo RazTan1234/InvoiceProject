@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QTabWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QMessageBox, QLineEdit, QFormLayout, QListWidget,
-    QProxyStyle, QStyle
+    QProxyStyle, QStyle, QGridLayout, QScrollArea
 )
 from PySide6.QtCore import Qt
 import os
@@ -54,24 +54,65 @@ class MainWindow(QMainWindow):
         self.current_settings = self.load_settings_from_file()
 
     def _build_stats_page(self):
-        layout = QVBoxLayout()
+        # Create scroll area
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setObjectName("statsScrollArea")
+
+        # Create content widget for scroll area
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
         layout.setAlignment(Qt.AlignTop)
         layout.setContentsMargins(20, 20, 20, 20)
-        title = QLabel("Statistics")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #fff;")
+
+        # Title
+        title = QLabel("Statistics Dashboard")
+        title.setObjectName("statsTitle")
         title.setAlignment(Qt.AlignCenter)
-        self.totalInvoicesLabel = QLabel("Total invoices: 0")
-        self.totalInvoicesLabel.setStyleSheet("font-size: 14px; color: #fff;")
-        self.totalAmountLabel = QLabel("Total amount: 0 RON")
-        self.totalAmountLabel.setStyleSheet("font-size: 14px; color: #fff;")
-        self.figure = Figure(figsize=(5, 3))
-        self.canvas = FigureCanvas(self.figure)
         layout.addWidget(title)
-        layout.addSpacing(10)
-        layout.addWidget(self.totalInvoicesLabel)
-        layout.addWidget(self.totalAmountLabel)
-        layout.addWidget(self.canvas)
-        self.statsPage.setLayout(layout)
+        layout.addSpacing(20)
+
+        # Grid for stat cards
+        stats_grid = QGridLayout()
+        stats_grid.setSpacing(15)
+
+        # Total Invoices Card
+        self.totalInvoicesLabel = QLabel("Total Invoices: 0")
+        self.totalInvoicesLabel.setObjectName("statCard")
+        stats_grid.addWidget(self.totalInvoicesLabel, 0, 0)
+
+        # Total Amount Card
+        self.totalAmountLabel = QLabel("Total Amount: 0 RON")
+        self.totalAmountLabel.setObjectName("statCard")
+        stats_grid.addWidget(self.totalAmountLabel, 0, 1)
+
+        # Average Invoice Card
+        self.avgLabel = QLabel("Avg Invoice: 0 RON")
+        self.avgLabel.setObjectName("statCard")
+        stats_grid.addWidget(self.avgLabel, 1, 0)
+
+        # Top Clients Card
+        self.topClientsLabel = QLabel("Top 5 Clients:\nNo data")
+        self.topClientsLabel.setObjectName("statCard")
+        stats_grid.addWidget(self.topClientsLabel, 1, 1)
+
+        # Monthly Growth Card
+        self.monthlyGrowthLabel = QLabel("Monthly Growth:\nNo data")
+        self.monthlyGrowthLabel.setObjectName("statCard")
+        stats_grid.addWidget(self.monthlyGrowthLabel, 2, 0)
+
+        # Chart
+        self.figure = Figure(figsize=(8, 8))  # Increased height to reduce crowding
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setObjectName("statsCanvas")
+        layout.addWidget(self.canvas, stretch=1)
+        layout.addLayout(stats_grid)
+
+        # Set content widget to scroll area
+        scroll_area.setWidget(content_widget)
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(scroll_area)
+        self.statsPage.setLayout(main_layout)
 
     def _build_about_page(self):
         layout = QVBoxLayout()
@@ -249,19 +290,67 @@ class MainWindow(QMainWindow):
     def update_stats(self):
         try:
             stats = db_handler.get_invoice_stats()
-            self.totalInvoicesLabel.setText(f"Total invoices: {stats['total_count']}")
-            self.totalAmountLabel.setText(f"Total amount: {stats['total_amount']:.2f} RON")
-            if stats['monthly_data']:
-                self.figure.clear()
-                ax = self.figure.add_subplot(111)
-                months = [data[0] for data in stats['monthly_data'][-6:]]
-                amounts = [data[2] for data in stats['monthly_data'][-6:]]
-                ax.bar(months, amounts, color='#8b5cf6')
-                ax.set_title('Monthly Invoice Amounts (Last 6 Months)')
-                ax.set_ylabel('Amount (RON)')
-                ax.tick_params(axis='x', rotation=45)
-                self.figure.tight_layout()
-                self.canvas.draw()
+            
+            # Update labels
+            self.totalInvoicesLabel.setText(f"Total Invoices: {stats['total_count']}")
+            self.totalAmountLabel.setText(
+                f"Total: {stats['total_with_vat']:.2f} RON\n"
+                f"(Net: {stats['total_without_vat']:.2f}, TVA: {stats['total_vat']:.2f})"
+            )
+            self.avgLabel.setText(
+                f"Avg Invoice: {stats['avg_payment']:.2f} RON\n"
+                f"(Net: {stats['avg_no_vat']:.2f}, TVA: {stats['avg_vat']:.2f}, "
+                f"TVA %: {stats['avg_vat_percent']:.1f}%, No TVA: {stats['pct_no_vat']:.1f}%)"
+            )
+            self.topClientsLabel.setText(
+                "Top 5 Clients:\n" + "\n".join([f"{c[0]}: {c[1]:.2f} RON" for c in stats['top_clients']])
+            )
+            self.monthlyGrowthLabel.setText(
+                "Monthly Growth:\n" + "\n".join([f"{m[0]}: {m[1]:.1f}%" for m in stats['monthly_growth']])
+            )
+
+            # Update charts
+            self.figure.clear()
+            # Chart 1: Stacked Net + TVA
+            ax1 = self.figure.add_subplot(311)
+            months = [m[0] for m in stats['monthly_data']]
+            sums_no_vat = [m[1] for m in stats['monthly_data']]
+            sums_vat = [m[2] for m in stats['monthly_data']]
+            ax1.bar(months, sums_no_vat, label="Net", color="#8b5cf6")
+            ax1.bar(months, sums_vat, bottom=sums_no_vat, label="TVA", color="#a78bfa")
+            ax1.set_title("Invoice Amounts (Net + TVA)", color="#ffffff")
+            ax1.legend()
+            ax1.tick_params(axis='x', rotation=45, colors="#e0e0e0")
+            ax1.set_facecolor("#2a2a3d")
+            ax1.tick_params(axis='y', colors="#e0e0e0")
+            ax1.title.set_color("#e0e0e0")
+
+            # Chart 2: Invoices per Month
+            ax2 = self.figure.add_subplot(312)
+            months_count = [m[0] for m in stats['monthly_count']]
+            counts = [m[1] for m in stats['monthly_count']]
+            ax2.plot(months_count, counts, marker='o', color="#22d3ee")
+            ax2.set_title("Invoices per Month", color="#ffffff")
+            ax2.set_ylabel("Count", color="#e0e0e0")
+            ax2.tick_params(axis='x', rotation=45, colors="#e0e0e0")
+            ax2.tick_params(axis='y', colors="#e0e0e0")
+            ax2.set_facecolor("#2a2a3d")
+
+            # Chart 3: Average Invoice Value
+            ax3 = self.figure.add_subplot(313)
+            months_avg = [m[0] for m in stats['monthly_avg']]
+            avgs = [m[1] for m in stats['monthly_avg']]
+            ax3.plot(months_avg, avgs, marker='o', color="#facc15")
+            ax3.set_title("Average Invoice Value per Month", color="#ffffff")
+            ax3.set_ylabel("Amount RON", color="#e0e0e0")
+            ax3.tick_params(axis='x', rotation=45, colors="#e0e0e0")
+            ax3.tick_params(axis='y', colors="#e0e0e0")
+            ax3.set_facecolor("#2a2a3d")
+
+            self.figure.patch.set_facecolor("#2a2a3d")
+            self.figure.subplots_adjust(hspace=0.4)  # Increase spacing between subplots
+            self.canvas.draw()
+
         except Exception as e:
             print(f"Error updating stats: {e}")
 
