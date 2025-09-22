@@ -28,12 +28,14 @@ class InvoiceTableDialog(QDialog):
         self.setSizeGripEnabled(True)
         self.setMinimumSize(800, 400)
         self.showMaximized()
+
         self.saved_data = None
         self.undo_stack = []
         self._last_value = None
         self._last_row = None
         self._last_col = None
         self._tracking = False
+
         self.columns = [
             "Număr factură", "Data emiterii", "Tip factură", "Monedă", "Nume cumpărător",
             "ID legal cumpărător", "ID TVA cumpărător", "Stradă cumpărător", "Oraș cumpărător",
@@ -41,7 +43,9 @@ class InvoiceTableDialog(QDialog):
             "Termeni plată", "Linii factură (produse)",
             "Valoare totală fără TVA", "Total TVA", "Total plată"
         ]
+
         layout = QVBoxLayout(self)
+
         info_text = (
             f"Loaded {len(import_data)} invoices from database"
             if import_data is not None
@@ -49,6 +53,7 @@ class InvoiceTableDialog(QDialog):
         )
         self.info_label = QLabel(info_text)
         layout.addWidget(self.info_label)
+
         self.table = QTableWidget(
             max(100, len(import_data) + 20) if import_data is not None else 100,
             len(self.columns)
@@ -57,45 +62,68 @@ class InvoiceTableDialog(QDialog):
             f"{col} *" if col in ["Număr factură", "Data emiterii", "Nume cumpărător"] else col
             for col in self.columns
         ])
+
         header_font = QFont()
         header_font.setBold(True)
         header_font.setPointSize(10)
         header = self.table.horizontalHeader()
         header.setFont(header_font)
         header.setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.MultiSelection)
+
         self.table.setStyleSheet("""
             QTableWidget::item:selected {
                 background-color: #5e548e;
                 color: white;
             }
         """)
+
         if import_data is not None:
+            self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            self.table.setSelectionMode(QAbstractItemView.MultiSelection)
             self.populate_table_with_data(import_data)
+        else:
+            self.table.setSelectionBehavior(QAbstractItemView.SelectItems)
+            self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+
         self.table.cellActivated.connect(self.store_old_value)
         self.table.cellClicked.connect(self.store_old_value)
         self.table.itemChanged.connect(self.track_changes)
         layout.addWidget(self.table)
+
         undo_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self)
         undo_shortcut.activated.connect(self.undo_last_edit)
+
+        select_all_shortcut = QShortcut(QKeySequence("Ctrl+A"), self)
+        select_all_shortcut.activated.connect(self.select_all_cells)
+
+        delete_shortcut = QShortcut(Qt.Key_Delete, self)
+        delete_shortcut.activated.connect(self.delete_selected_cells)
+
         button_layout = QHBoxLayout()
         if import_data is not None:
-            self.generateSelectedBtn = QPushButton("Generate selected invoices to PDFs")
+            self.generateSelectedBtn = QPushButton("Generate Selected Invoices to PDFs")
             self.generateSelectedBtn.clicked.connect(self.generate_selected_pdfs)
             buttons = [self.generateSelectedBtn]
         else:
             self.saveToDbButton = QPushButton("Save to Database")
             self.saveToDbButton.clicked.connect(self.save_to_database)
             buttons = [self.saveToDbButton]
+
         self.cancelButton = QPushButton("Cancel")
         self.cancelButton.clicked.connect(self.reject)
         buttons.append(self.cancelButton)
+
         button_layout.addStretch()
         for btn in buttons:
             button_layout.addWidget(btn)
         button_layout.addStretch()
         layout.addLayout(button_layout)
+
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.Paste):
+            self.paste_from_clipboard()
+        else:
+            super().keyPressEvent(event)
 
     def store_old_value(self, row, col):
         item = self.table.item(row, col)
@@ -123,6 +151,20 @@ class InvoiceTableDialog(QDialog):
         self._tracking = True
         item.setText(str(old_value))
         self._tracking = False
+
+    def select_all_cells(self):
+        self.table.selectAll()
+
+    def delete_selected_cells(self):
+        selected_items = self.table.selectedItems()
+        if not selected_items:
+            return
+        for item in selected_items:
+            row, col = item.row(), item.column()
+            old_value = item.text()
+            if old_value.strip():
+                self.undo_stack.append((row, col, old_value))
+            item.setText("")
 
     def paste_from_clipboard(self):
         clipboard_text = pyperclip.paste()
@@ -199,8 +241,21 @@ class InvoiceTableDialog(QDialog):
         return errors
 
     def save_to_database(self):
-        df = self.get_selected_invoices()
-        if df is not None and not df.empty:
+        rows, cols = self.table.rowCount(), self.table.columnCount()
+        data = []
+        for row in range(rows):
+            row_data = []
+            is_empty = True
+            for col in range(cols):
+                item = self.table.item(row, col)
+                value = item.text() if item else ""
+                if value.strip():
+                    is_empty = False
+                row_data.append(value)
+            if not is_empty:
+                data.append(row_data)
+        if data:
+            df = pd.DataFrame(data, columns=self.columns)
             for _, row in df.iterrows():
                 db.insert_invoice(row.to_dict())
             QMessageBox.information(self, "Success", f"{len(df)} invoices saved to database.")
