@@ -54,61 +54,49 @@ class MainWindow(QMainWindow):
         self.current_settings = self.load_settings_from_file()
 
     def _build_stats_page(self):
-        # Create scroll area
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setObjectName("statsScrollArea")
-
-        # Create content widget for scroll area
         content_widget = QWidget()
         layout = QVBoxLayout(content_widget)
         layout.setAlignment(Qt.AlignTop)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # Title
         title = QLabel("Statistics Dashboard")
         title.setObjectName("statsTitle")
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
         layout.addSpacing(20)
 
-        # Grid for stat cards
         stats_grid = QGridLayout()
         stats_grid.setSpacing(15)
 
-        # Total Invoices Card
         self.totalInvoicesLabel = QLabel("Total Invoices: 0")
         self.totalInvoicesLabel.setObjectName("statCard")
         stats_grid.addWidget(self.totalInvoicesLabel, 0, 0)
 
-        # Total Amount Card
         self.totalAmountLabel = QLabel("Total Amount: 0 RON")
         self.totalAmountLabel.setObjectName("statCard")
         stats_grid.addWidget(self.totalAmountLabel, 0, 1)
 
-        # Average Invoice Card
         self.avgLabel = QLabel("Avg Invoice: 0 RON")
         self.avgLabel.setObjectName("statCard")
         stats_grid.addWidget(self.avgLabel, 1, 0)
 
-        # Top Clients Card
         self.topClientsLabel = QLabel("Top 5 Clients:\nNo data")
         self.topClientsLabel.setObjectName("statCard")
         stats_grid.addWidget(self.topClientsLabel, 1, 1)
 
-        # Monthly Growth Card
         self.monthlyGrowthLabel = QLabel("Monthly Growth:\nNo data")
         self.monthlyGrowthLabel.setObjectName("statCard")
         stats_grid.addWidget(self.monthlyGrowthLabel, 2, 0)
 
-        # Chart
-        self.figure = Figure(figsize=(8, 8))  # Increased height to reduce crowding
+        self.figure = Figure(figsize=(10, 9))
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setObjectName("statsCanvas")
         layout.addWidget(self.canvas, stretch=1)
         layout.addLayout(stats_grid)
 
-        # Set content widget to scroll area
         scroll_area.setWidget(content_widget)
         main_layout = QVBoxLayout()
         main_layout.addWidget(scroll_area)
@@ -287,8 +275,7 @@ class MainWindow(QMainWindow):
     def update_stats(self):
         try:
             stats = db_handler.get_invoice_stats()
-            
-            # Update labels
+
             self.totalInvoicesLabel.setText(f"Total Invoices: {stats['total_count']}")
             self.totalAmountLabel.setText(
                 f"Total: {stats['total_with_vat']:.2f} RON\n"
@@ -306,9 +293,8 @@ class MainWindow(QMainWindow):
                 "Monthly Growth:\n" + "\n".join([f"{m[0]}: {m[1]:.1f}%" for m in stats['monthly_growth']])
             )
 
-            # Update charts
             self.figure.clear()
-            # Chart 1: Stacked Net + TVA
+
             ax1 = self.figure.add_subplot(311)
             months = [m[0] for m in stats['monthly_data']]
             sums_no_vat = [m[1] for m in stats['monthly_data']]
@@ -317,35 +303,41 @@ class MainWindow(QMainWindow):
             ax1.bar(months, sums_vat, bottom=sums_no_vat, label="TVA", color="#a78bfa")
             ax1.set_title("Invoice Amounts (Net + TVA)", color="#ffffff")
             ax1.legend()
-            ax1.tick_params(axis='x', rotation=45, colors="#e0e0e0")
             ax1.set_facecolor("#2a2a3d")
+            ax1.tick_params(axis='x', colors="#e0e0e0")
             ax1.tick_params(axis='y', colors="#e0e0e0")
             ax1.title.set_color("#e0e0e0")
 
-            # Chart 2: Invoices per Month
             ax2 = self.figure.add_subplot(312)
             months_count = [m[0] for m in stats['monthly_count']]
             counts = [m[1] for m in stats['monthly_count']]
             ax2.plot(months_count, counts, marker='o', color="#22d3ee")
             ax2.set_title("Invoices per Month", color="#ffffff")
             ax2.set_ylabel("Count", color="#e0e0e0")
-            ax2.tick_params(axis='x', rotation=45, colors="#e0e0e0")
-            ax2.tick_params(axis='y', colors="#e0e0e0")
             ax2.set_facecolor("#2a2a3d")
+            ax2.tick_params(axis='x', colors="#e0e0e0")
+            ax2.tick_params(axis='y', colors="#e0e0e0")
 
-            # Chart 3: Average Invoice Value
             ax3 = self.figure.add_subplot(313)
             months_avg = [m[0] for m in stats['monthly_avg']]
             avgs = [m[1] for m in stats['monthly_avg']]
             ax3.plot(months_avg, avgs, marker='o', color="#facc15")
             ax3.set_title("Average Invoice Value per Month", color="#ffffff")
             ax3.set_ylabel("Amount RON", color="#e0e0e0")
-            ax3.tick_params(axis='x', rotation=45, colors="#e0e0e0")
-            ax3.tick_params(axis='y', colors="#e0e0e0")
             ax3.set_facecolor("#2a2a3d")
+            ax3.tick_params(axis='x', colors="#e0e0e0")
+            ax3.tick_params(axis='y', colors="#e0e0e0")
 
             self.figure.patch.set_facecolor("#2a2a3d")
-            self.figure.subplots_adjust(hspace=0.4)  # Increase spacing between subplots
+            self.figure.subplots_adjust(hspace=0.4)
+
+            # 🔑 Rotește etichetele și ajustează layout-ul
+            for ax in [ax1, ax2, ax3]:
+                for label in ax.get_xticklabels():
+                    label.set_rotation(45)
+                    label.set_ha("right")
+
+            self.figure.tight_layout()
             self.canvas.draw()
 
         except Exception as e:
@@ -417,10 +409,7 @@ class MainWindow(QMainWindow):
         self.companyCUI.setText(g("company", "cui") or "")
         self.sellerLegalId.setText(g("seller", "legal_id") or "")
         self.sellerVAT.setText(g("seller", "vat") or "")
-        self.sellerStreet.setText(g("seller", "street") or "")
-        self.sellerCity.setText(g("seller", "city") or "")
-        self.sellerCounty.setText(g("seller", "county") or "")
-        self.sellerCountry.setText(g("seller", "country") or "")
+        self.sellerStreet.setText
 
     def on_tab_changed(self, index: int):
         if index == self.tabs.indexOf(self.settingsPage):
